@@ -12,7 +12,7 @@ import pandas as pd
 from helpers.poles_tracker_builder.pull_sap_data import pull_sap_data
 from helpers.poles_tracker_builder.pull_epw_data import pull_epw_data
 from helpers.poles_tracker_builder.pull_land_data import pull_land_data
-from helpers.wmp_tracker_builder.update_trackers import build_sap_tracker_initial
+from helpers.poles_tracker_builder.update_trackers import build_sap_tracker_initial
 from helpers.poles_tracker_builder.manual_inputs import save_pasted_pairs, save_from_tracker_excel
 
 from services.db.poles_rfc_db import default_db_path
