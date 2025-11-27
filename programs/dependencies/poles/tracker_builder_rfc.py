@@ -25,14 +25,14 @@ from helpers.poles_tracker_builder.logic import (
 )
 
 # table builder for Environment view
-from helpers.wmp_tracker_builder.table_builders.environment_table import get_environment_table
-from helpers.wmp_tracker_builder.table_builders.misctsk_table import get_misc_tsk_table
-from helpers.wmp_tracker_builder.table_builders.joint_pole_table import get_joint_pole_table
-from helpers.wmp_tracker_builder.table_builders.permit_table import get_permit_table
+from helpers.poles_tracker_builder.table_builders.environment_table import get_environment_table
+from helpers.poles_tracker_builder.table_builders.misctsk_table import get_misc_tsk_table
+from helpers.poles_tracker_builder.table_builders.joint_pole_table import get_joint_pole_table
+from helpers.poles_tracker_builder.table_builders.permit_table import get_permit_table
 # near the other imports
-from helpers.wmp_tracker_builder.table_builders.land_table import get_land_table
-from helpers.wmp_tracker_builder.table_builders.faa_table import get_faa_table
-from helpers.wmp_tracker_builder.table_builders.master_table import get_master_table
+from helpers.poles_tracker_builder.table_builders.land_table import get_land_table
+from helpers.poles_tracker_builder.table_builders.faa_table import get_faa_table
+from helpers.poles_tracker_builder.table_builders.master_table import get_master_table
 
 from helpers.sap_reports.poles_rfc.task_management_report import get_task_management_report
 
