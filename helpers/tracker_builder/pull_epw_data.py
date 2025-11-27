@@ -6,11 +6,6 @@ from typing import Tuple, Set
 import pandas as pd
 
 DATE_FMT = "%m/%d/%Y"
-ALLOWED_MAT: Set[str] = {
-    "06G","08S","2AJ","2AR","48L","49B","49C","49D","49E","49H","49I","49S","49T","49X","56S",
-    "06B","06A","06D","06E","06H","06I","08J","3UT","3US","3UP","3UD","3UE","3UF","3UL","2AE","2BD",
-    "KAF","KBC"
-}
 
 def _fmt_date(val):
     if pd.isna(val) or str(val).strip() == "":
@@ -27,7 +22,7 @@ def _ci(df: pd.DataFrame, name: str) -> str | None:
             return c
     return None
 
-def pull_epw_data(db_path: str, xlsx_path: str) -> Tuple[str, int]:
+def pull_epw_data(db_path: str, xlsx_path: str, ALLOWED_MAT: Set[str]) -> Tuple[str, int]:
     """
     Read Excel 'Export' → normalize to 'epw_data', filter MAT to ALLOWED_MAT.
     Datatypes to store per spec.
