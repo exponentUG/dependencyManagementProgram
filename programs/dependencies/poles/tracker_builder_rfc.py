@@ -9,11 +9,13 @@ import csv
 import io
 import pandas as pd
 
-from helpers.poles_tracker_builder.pull_sap_data import pull_sap_data
-from helpers.poles_tracker_builder.pull_epw_data import pull_epw_data
-from helpers.poles_tracker_builder.pull_land_data import pull_land_data
-from helpers.poles_tracker_builder.update_trackers import build_sap_tracker_initial
-from helpers.poles_tracker_builder.manual_inputs import save_pasted_pairs, save_from_tracker_excel
+from ledgers.tracker_conditions_ledger.poles_rfc import ALLOWED_MAT
+
+from helpers.tracker_builder.pull_sap_data import pull_sap_data
+from helpers.tracker_builder.pull_epw_data import pull_epw_data
+from helpers.tracker_builder.pull_land_data import pull_land_data
+from helpers.tracker_builder.update_trackers import build_sap_tracker_initial
+from helpers.tracker_builder.manual_inputs import save_pasted_pairs, save_from_tracker_excel
 
 from services.db.poles_rfc_db import default_db_path
 
@@ -25,14 +27,14 @@ from helpers.poles_tracker_builder.logic import (
 )
 
 # table builder for Environment view
-from helpers.poles_tracker_builder.table_builders.environment_table import get_environment_table
-from helpers.poles_tracker_builder.table_builders.misctsk_table import get_misc_tsk_table
-from helpers.poles_tracker_builder.table_builders.joint_pole_table import get_joint_pole_table
-from helpers.poles_tracker_builder.table_builders.permit_table import get_permit_table
+from helpers.tracker_builder.table_builders.environment_table import get_environment_table
+from helpers.tracker_builder.table_builders.misctsk_table import get_misc_tsk_table
+from helpers.tracker_builder.table_builders.joint_pole_table import get_joint_pole_table
+from helpers.tracker_builder.table_builders.permit_table import get_permit_table
 # near the other imports
-from helpers.poles_tracker_builder.table_builders.land_table import get_land_table
-from helpers.poles_tracker_builder.table_builders.faa_table import get_faa_table
-from helpers.poles_tracker_builder.table_builders.master_table import get_master_table
+from helpers.tracker_builder.table_builders.land_table import get_land_table
+from helpers.tracker_builder.table_builders.faa_table import get_faa_table
+from helpers.tracker_builder.table_builders.master_table import get_master_table
 
 from helpers.sap_reports.poles_rfc.task_management_report import get_task_management_report
 
@@ -434,8 +436,8 @@ class Poles_Tracker_Builder_RFC(ToolView):
             try:
                 msgs = []
                 tbl, n = pull_sap_data(db_path, paths["SAP"]);   msgs.append(f"- {tbl}: {n:,} rows")
-                tbl, n = pull_epw_data(db_path, paths["EPW"]);   msgs.append(f"- {tbl}: {n:,} rows")
-                tbl, n = pull_land_data(db_path, paths["LAND"]); msgs.append(f"- {tbl}: {n:,} rows")
+                tbl, n = pull_epw_data(db_path, paths["EPW"], ALLOWED_MAT);   msgs.append(f"- {tbl}: {n:,} rows")
+                tbl, n = pull_land_data(db_path, paths["LAND"], ALLOWED_MAT); msgs.append(f"- {tbl}: {n:,} rows")
 
                 # Ensure indexes after loading source tables
                 self._ensure_perf_indexes(db_path)
