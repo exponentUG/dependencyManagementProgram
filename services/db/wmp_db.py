@@ -7,6 +7,7 @@ from typing import Iterable, List, Tuple, Optional, Dict
 from datetime import datetime
 import pandas as pd
 from pathlib import Path
+from ledgers.tracker_conditions_ledger.wmp import ALLOWED_MAT, ALLOWED_YEARS, REQUIRED_PM_FLAG, NOTIF_STATUS_TO_REMOVE
 
 # ------------------------
 # Paths & DB location
@@ -68,12 +69,6 @@ MPP_SCHEMA: Dict[str, str] = {
     "Job Owner": "TEXT",                       #not needed
     "Project Managed Flag": "TEXT",
 }
-
-ALLOWED_MAT = {
-    "06G","08S","2AJ","2AR","48L","49B","49C","49D","49E","49H","49I","49S","49T","49X","56S","06B","06A","06D","06E","06H","06I","08J","3UT","3US","3UP","3UD","3UE","3UF","3UL","2AE","2BD","KAF","KBC"
-}
-ALLOWED_YEARS = {2025, 2026, 2027, 2028, 2029, 2030}
-REQUIRED_PM_FLAG = "N"
 
 # ------------------------
 # DB bootstrap
@@ -275,7 +270,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         mat_u.isin(allowed_mat)
         & pry.isin(allowed_years)
         & (pm_u == REQUIRED_PM_FLAG.upper())
-        & (notif_u != "COMP")
+        & (notif_u != NOTIF_STATUS_TO_REMOVE)
     )
 
     df = df.loc[mask].reset_index(drop=True)
