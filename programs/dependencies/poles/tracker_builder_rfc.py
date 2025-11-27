@@ -18,7 +18,7 @@ from helpers.wmp_tracker_builder.manual_inputs import save_pasted_pairs, save_fr
 from services.db.poles_rfc_db import default_db_path
 
 from core.base import ToolView, FONT_H1
-from helpers.wmp_tracker_builder.logic import (
+from helpers.poles_tracker_builder.logic import (
     run_import_and_updates,
     export_order_list_to_excel,
     today_strings,
