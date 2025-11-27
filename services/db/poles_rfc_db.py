@@ -272,7 +272,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
     allowed_mat   = {m.upper() for m in ALLOWED_MAT}
     # treat PRY as string for filtering to avoid full numeric conversion
     allowed_years = {str(y) for y in ALLOWED_YEARS}
-    allowed_sap_status = {y.upper for y in ALLOWED_SAP_STATUS}
+    allowed_sap_status = {y.upper() for y in ALLOWED_SAP_STATUS}
     pry           = df["Project Reporting Year"].astype(str)
 
     mask = (
