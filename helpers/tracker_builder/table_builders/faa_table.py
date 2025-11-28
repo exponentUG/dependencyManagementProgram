@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 COLUMNS: List[str] = [
     "Order",
+    "Notification",           # <-- NEW COLUMN
     "Project Reporting Year",
     "MAT Code",
     "Program",
@@ -46,20 +47,21 @@ def get_faa_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     ft."Order",
-                    COALESCE(m."Project Reporting Year", '') AS "Project Reporting Year",
-                    COALESCE(m."MAT", '')                    AS "MAT Code",
-                    COALESCE(m."Program", '')                AS "Program",
-                    COALESCE(m."Sub-Category", '')           AS "Sub-Category",
-                    COALESCE(m."Div", '')                    AS "Div",
-                    COALESCE(m."Region", '')                 AS "Region",
-                    COALESCE(m."Work Plan Date", '')         AS "WPD",
-                    COALESCE(m."CLICK Start Date", '')       AS "CLICK Start Date",
-                    COALESCE(m."CLICK End Date", '')         AS "CLICK End Date",
-                    COALESCE(ft."Notification Status", '')   AS "Notification Status",
-                    COALESCE(ft."SAP Status", '')            AS "SAP Status",
-                    COALESCE(ft."DS76", '')                  AS "DS76",
-                    COALESCE(ft."PC24", '')                  AS "PC24",
-                    COALESCE(mt."FAA Notes", '')             AS "FAA Notes"
+                    COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
+                    COALESCE(m."Project Reporting Year", '')     AS "Project Reporting Year",
+                    COALESCE(m."MAT", '')                         AS "MAT Code",
+                    COALESCE(m."Program", '')                     AS "Program",
+                    COALESCE(m."Sub-Category", '')                AS "Sub-Category",
+                    COALESCE(m."Div", '')                         AS "Div",
+                    COALESCE(m."Region", '')                      AS "Region",
+                    COALESCE(m."Work Plan Date", '')              AS "WPD",
+                    COALESCE(m."CLICK Start Date", '')            AS "CLICK Start Date",
+                    COALESCE(m."CLICK End Date", '')              AS "CLICK End Date",
+                    COALESCE(ft."Notification Status", '')        AS "Notification Status",
+                    COALESCE(ft."SAP Status", '')                 AS "SAP Status",
+                    COALESCE(ft."DS76", '')                       AS "DS76",
+                    COALESCE(ft."PC24", '')                       AS "PC24",
+                    COALESCE(mt."FAA Notes", '')                  AS "FAA Notes"
                 FROM faa_tracker ft
                 LEFT JOIN mpp_data m ON m."Order" = ft."Order"
                 LEFT JOIN manual_tracker mt ON mt."Order" = ft."Order"
@@ -69,20 +71,21 @@ def get_faa_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     ft."Order",
-                    COALESCE(m."Project Reporting Year", '') AS "Project Reporting Year",
-                    COALESCE(m."MAT", '')                    AS "MAT Code",
-                    COALESCE(m."Program", '')                AS "Program",
-                    COALESCE(m."Sub-Category", '')           AS "Sub-Category",
-                    COALESCE(m."Div", '')                    AS "Div",
-                    COALESCE(m."Region", '')                 AS "Region",
-                    COALESCE(m."Work Plan Date", '')         AS "WPD",
-                    COALESCE(m."CLICK Start Date", '')       AS "CLICK Start Date",
-                    COALESCE(m."CLICK End Date", '')         AS "CLICK End Date",
-                    COALESCE(ft."Notification Status", '')   AS "Notification Status",
-                    COALESCE(ft."SAP Status", '')            AS "SAP Status",
-                    COALESCE(ft."DS76", '')                  AS "DS76",
-                    COALESCE(ft."PC24", '')                  AS "PC24",
-                    ''                                       AS "FAA Notes"
+                    COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
+                    COALESCE(m."Project Reporting Year", '')     AS "Project Reporting Year",
+                    COALESCE(m."MAT", '')                         AS "MAT Code",
+                    COALESCE(m."Program", '')                     AS "Program",
+                    COALESCE(m."Sub-Category", '')                AS "Sub-Category",
+                    COALESCE(m."Div", '')                         AS "Div",
+                    COALESCE(m."Region", '')                      AS "Region",
+                    COALESCE(m."Work Plan Date", '')              AS "WPD",
+                    COALESCE(m."CLICK Start Date", '')            AS "CLICK Start Date",
+                    COALESCE(m."CLICK End Date", '')              AS "CLICK End Date",
+                    COALESCE(ft."Notification Status", '')        AS "Notification Status",
+                    COALESCE(ft."SAP Status", '')                 AS "SAP Status",
+                    COALESCE(ft."DS76", '')                       AS "DS76",
+                    COALESCE(ft."PC24", '')                       AS "PC24",
+                    ''                                            AS "FAA Notes"
                 FROM faa_tracker ft
                 LEFT JOIN mpp_data m ON m."Order" = ft."Order"
                 ORDER BY ft."Order"
@@ -91,20 +94,21 @@ def get_faa_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     ft."Order",
-                    ''                                       AS "Project Reporting Year",
-                    ''                                       AS "MAT Code",
-                    ''                                       AS "Program",
-                    ''                                       AS "Sub-Category",
-                    ''                                       AS "Div",
-                    ''                                       AS "Region",
-                    ''                                       AS "WPD",
-                    ''                                       AS "CLICK Start Date",
-                    ''                                       AS "CLICK End Date",
-                    COALESCE(ft."Notification Status", '')   AS "Notification Status",
-                    COALESCE(ft."SAP Status", '')            AS "SAP Status",
-                    COALESCE(ft."DS76", '')                  AS "DS76",
-                    COALESCE(ft."PC24", '')                  AS "PC24",
-                    COALESCE(mt."FAA Notes", '')             AS "FAA Notes"
+                    ''                                            AS "Notification",
+                    ''                                            AS "Project Reporting Year",
+                    ''                                            AS "MAT Code",
+                    ''                                            AS "Program",
+                    ''                                            AS "Sub-Category",
+                    ''                                            AS "Div",
+                    ''                                            AS "Region",
+                    ''                                            AS "WPD",
+                    ''                                            AS "CLICK Start Date",
+                    ''                                            AS "CLICK End Date",
+                    COALESCE(ft."Notification Status", '')        AS "Notification Status",
+                    COALESCE(ft."SAP Status", '')                 AS "SAP Status",
+                    COALESCE(ft."DS76", '')                       AS "DS76",
+                    COALESCE(ft."PC24", '')                       AS "PC24",
+                    COALESCE(mt."FAA Notes", '')                  AS "FAA Notes"
                 FROM faa_tracker ft
                 LEFT JOIN manual_tracker mt ON mt."Order" = ft."Order"
                 ORDER BY ft."Order"
@@ -113,20 +117,21 @@ def get_faa_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     ft."Order",
-                    ''                                       AS "Project Reporting Year",
-                    ''                                       AS "MAT Code",
-                    ''                                       AS "Program",
-                    ''                                       AS "Sub-Category",
-                    ''                                       AS "Div",
-                    ''                                       AS "Region",
-                    ''                                       AS "WPD",
-                    ''                                       AS "CLICK Start Date",
-                    ''                                       AS "CLICK End Date",
-                    COALESCE(ft."Notification Status", '')   AS "Notification Status",
-                    COALESCE(ft."SAP Status", '')            AS "SAP Status",
-                    COALESCE(ft."DS76", '')                  AS "DS76",
-                    COALESCE(ft."PC24", '')                  AS "PC24",
-                    ''                                       AS "FAA Notes"
+                    ''                                            AS "Notification",
+                    ''                                            AS "Project Reporting Year",
+                    ''                                            AS "MAT Code",
+                    ''                                            AS "Program",
+                    ''                                            AS "Sub-Category",
+                    ''                                            AS "Div",
+                    ''                                            AS "Region",
+                    ''                                            AS "WPD",
+                    ''                                            AS "CLICK Start Date",
+                    ''                                            AS "CLICK End Date",
+                    COALESCE(ft."Notification Status", '')        AS "Notification Status",
+                    COALESCE(ft."SAP Status", '')                 AS "SAP Status",
+                    COALESCE(ft."DS76", '')                       AS "DS76",
+                    COALESCE(ft."PC24", '')                       AS "PC24",
+                    ''                                            AS "FAA Notes"
                 FROM faa_tracker ft
                 ORDER BY ft."Order"
             """

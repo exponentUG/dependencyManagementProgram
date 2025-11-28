@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 COLUMNS: List[str] = [
     "Order",
+    "Notification",          # <-- NEW COLUMN
     "Project Reporting Year",
     "MAT Code",
     "Program",
@@ -52,6 +53,7 @@ def get_misc_tsk_table(db_path: str) -> Tuple[list[str], list[tuple]]:
         cur.execute("""
             SELECT
                 mt."Order" AS "Order",
+                mpp."Notification" AS "Notification",
                 mpp."Project Reporting Year" AS "Project Reporting Year",
                 mpp."MAT" AS "MAT Code",
                 mpp."Program" AS "Program",

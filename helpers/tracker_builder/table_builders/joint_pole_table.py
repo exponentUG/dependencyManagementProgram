@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 COLUMNS: List[str] = [
     "Order",
+    "Notification",           # <-- NEW COLUMN
     "Project Reporting Year",
     "MAT Code",
     "Program",
@@ -47,23 +48,24 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     jt."Order",
-                    COALESCE(m."Project Reporting Year", '') AS "Project Reporting Year",
-                    COALESCE(m."MAT", '')                    AS "MAT Code",
-                    COALESCE(m."Program", '')                AS "Program",
-                    COALESCE(m."Sub-Category", '')           AS "Sub-Category",
-                    COALESCE(m."Div", '')                    AS "Div",
-                    COALESCE(m."Region", '')                 AS "Region",
-                    COALESCE(m."Work Plan Date", '')         AS "WPD",
-                    COALESCE(m."CLICK Start Date", '')       AS "CLICK Start Date",
-                    COALESCE(m."CLICK End Date", '')         AS "CLICK End Date",
-                    COALESCE(jt."Notification Status", '')   AS "Notification Status",
-                    COALESCE(jt."SAP Status", '')            AS "SAP Status",
-                    COALESCE(jt."DS42", '')                  AS "DS42",
-                    COALESCE(jt."PC20", '')                  AS "PC20",
-                    jt."Sent to OU Date"                     AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                AS "Anticipated Out Date",
-                    COALESCE(mt."Joint Pole Notes", '')      AS "Joint Pole Notes",
-                    COALESCE(jt."Action", '')                AS "Action"
+                    COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
+                    COALESCE(m."Project Reporting Year", '')     AS "Project Reporting Year",
+                    COALESCE(m."MAT", '')                         AS "MAT Code",
+                    COALESCE(m."Program", '')                     AS "Program",
+                    COALESCE(m."Sub-Category", '')                AS "Sub-Category",
+                    COALESCE(m."Div", '')                         AS "Div",
+                    COALESCE(m."Region", '')                      AS "Region",
+                    COALESCE(m."Work Plan Date", '')              AS "WPD",
+                    COALESCE(m."CLICK Start Date", '')            AS "CLICK Start Date",
+                    COALESCE(m."CLICK End Date", '')              AS "CLICK End Date",
+                    COALESCE(jt."Notification Status", '')        AS "Notification Status",
+                    COALESCE(jt."SAP Status", '')                 AS "SAP Status",
+                    COALESCE(jt."DS42", '')                       AS "DS42",
+                    COALESCE(jt."PC20", '')                       AS "PC20",
+                    jt."Sent to OU Date"                          AS "Sent to OU Date",
+                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    COALESCE(mt."Joint Pole Notes", '')           AS "Joint Pole Notes",
+                    COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
                 LEFT JOIN mpp_data m ON m."Order" = jt."Order"
                 LEFT JOIN manual_tracker mt ON mt."Order" = jt."Order"
@@ -73,23 +75,24 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     jt."Order",
-                    COALESCE(m."Project Reporting Year", '') AS "Project Reporting Year",
-                    COALESCE(m."MAT", '')                    AS "MAT Code",
-                    COALESCE(m."Program", '')                AS "Program",
-                    COALESCE(m."Sub-Category", '')           AS "Sub-Category",
-                    COALESCE(m."Div", '')                    AS "Div",
-                    COALESCE(m."Region", '')                 AS "Region",
-                    COALESCE(m."Work Plan Date", '')         AS "WPD",
-                    COALESCE(m."CLICK Start Date", '')       AS "CLICK Start Date",
-                    COALESCE(m."CLICK End Date", '')         AS "CLICK End Date",
-                    COALESCE(jt."Notification Status", '')   AS "Notification Status",
-                    COALESCE(jt."SAP Status", '')            AS "SAP Status",
-                    COALESCE(jt."DS42", '')                  AS "DS42",
-                    COALESCE(jt."PC20", '')                  AS "PC20",
-                    jt."Sent to OU Date"                     AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                AS "Anticipated Out Date",
-                    ''                                       AS "Joint Pole Notes",
-                    COALESCE(jt."Action", '')                AS "Action"
+                    COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
+                    COALESCE(m."Project Reporting Year", '')     AS "Project Reporting Year",
+                    COALESCE(m."MAT", '')                         AS "MAT Code",
+                    COALESCE(m."Program", '')                     AS "Program",
+                    COALESCE(m."Sub-Category", '')                AS "Sub-Category",
+                    COALESCE(m."Div", '')                         AS "Div",
+                    COALESCE(m."Region", '')                      AS "Region",
+                    COALESCE(m."Work Plan Date", '')              AS "WPD",
+                    COALESCE(m."CLICK Start Date", '')            AS "CLICK Start Date",
+                    COALESCE(m."CLICK End Date", '')              AS "CLICK End Date",
+                    COALESCE(jt."Notification Status", '')        AS "Notification Status",
+                    COALESCE(jt."SAP Status", '')                 AS "SAP Status",
+                    COALESCE(jt."DS42", '')                       AS "DS42",
+                    COALESCE(jt."PC20", '')                       AS "PC20",
+                    jt."Sent to OU Date"                          AS "Sent to OU Date",
+                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    ''                                            AS "Joint Pole Notes",
+                    COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
                 LEFT JOIN mpp_data m ON m."Order" = jt."Order"
                 ORDER BY jt."Order"
@@ -98,23 +101,24 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     jt."Order",
-                    ''                                      AS "Project Reporting Year",
-                    ''                                      AS "MAT Code",
-                    ''                                      AS "Program",
-                    ''                                      AS "Sub-Category",
-                    ''                                      AS "Div",
-                    ''                                      AS "Region",
-                    ''                                      AS "WPD",
-                    ''                                      AS "CLICK Start Date",
-                    ''                                      AS "CLICK End Date",
-                    COALESCE(jt."Notification Status", '')  AS "Notification Status",
-                    COALESCE(jt."SAP Status", '')           AS "SAP Status",
-                    COALESCE(jt."DS42", '')                 AS "DS42",
-                    COALESCE(jt."PC20", '')                 AS "PC20",
-                    jt."Sent to OU Date"                    AS "Sent to OU Date",
-                    jt."Anticipated Out Date"               AS "Anticipated Out Date",
-                    COALESCE(mt."Joint Pole Notes", '')     AS "Joint Pole Notes",
-                    COALESCE(jt."Action", '')               AS "Action"
+                    ''                                           AS "Notification",
+                    ''                                           AS "Project Reporting Year",
+                    ''                                           AS "MAT Code",
+                    ''                                           AS "Program",
+                    ''                                           AS "Sub-Category",
+                    ''                                           AS "Div",
+                    ''                                           AS "Region",
+                    ''                                           AS "WPD",
+                    ''                                           AS "CLICK Start Date",
+                    ''                                           AS "CLICK End Date",
+                    COALESCE(jt."Notification Status", '')       AS "Notification Status",
+                    COALESCE(jt."SAP Status", '')                AS "SAP Status",
+                    COALESCE(jt."DS42", '')                      AS "DS42",
+                    COALESCE(jt."PC20", '')                      AS "PC20",
+                    jt."Sent to OU Date"                         AS "Sent to OU Date",
+                    jt."Anticipated Out Date"                    AS "Anticipated Out Date",
+                    COALESCE(mt."Joint Pole Notes", '')          AS "Joint Pole Notes",
+                    COALESCE(jt."Action", '')                    AS "Action"
                 FROM joint_pole_tracker jt
                 LEFT JOIN manual_tracker mt ON mt."Order" = jt."Order"
                 ORDER BY jt."Order"
@@ -123,23 +127,24 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     jt."Order",
-                    ''                                      AS "Project Reporting Year",
-                    ''                                      AS "MAT Code",
-                    ''                                      AS "Program",
-                    ''                                      AS "Sub-Category",
-                    ''                                      AS "Div",
-                    ''                                      AS "Region",
-                    ''                                      AS "WPD",
-                    ''                                      AS "CLICK Start Date",
-                    ''                                      AS "CLICK End Date",
-                    COALESCE(jt."Notification Status", '')  AS "Notification Status",
-                    COALESCE(jt."SAP Status", '')           AS "SAP Status",
-                    COALESCE(jt."DS42", '')                 AS "DS42",
-                    COALESCE(jt."PC20", '')                 AS "PC20",
-                    jt."Sent to OU Date"                    AS "Sent to OU Date",
-                    jt."Anticipated Out Date"               AS "Anticipated Out Date",
-                    ''                                      AS "Joint Pole Notes",
-                    COALESCE(jt."Action", '')               AS "Action"
+                    ''                                           AS "Notification",
+                    ''                                           AS "Project Reporting Year",
+                    ''                                           AS "MAT Code",
+                    ''                                           AS "Program",
+                    ''                                           AS "Sub-Category",
+                    ''                                           AS "Div",
+                    ''                                           AS "Region",
+                    ''                                           AS "WPD",
+                    ''                                           AS "CLICK Start Date",
+                    ''                                           AS "CLICK End Date",
+                    COALESCE(jt."Notification Status", '')       AS "Notification Status",
+                    COALESCE(jt."SAP Status", '')                AS "SAP Status",
+                    COALESCE(jt."DS42", '')                      AS "DS42",
+                    COALESCE(jt."PC20", '')                      AS "PC20",
+                    jt."Sent to OU Date"                         AS "Sent to OU Date",
+                    jt."Anticipated Out Date"                    AS "Anticipated Out Date",
+                    ''                                           AS "Joint Pole Notes",
+                    COALESCE(jt."Action", '')                    AS "Action"
                 FROM joint_pole_tracker jt
                 ORDER BY jt."Order"
             """

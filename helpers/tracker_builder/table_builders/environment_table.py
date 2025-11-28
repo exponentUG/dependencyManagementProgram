@@ -5,15 +5,16 @@ from typing import List, Tuple
 
 ENV_COLUMNS: List[str] = [
     "Order",
+    "Notification",           # <-- NEW COLUMN
     "Project Reporting Year",
     "MAT Code",
     "Program",
     "Sub-Category",
     "Div",
     "Region",
-    "WPD",                 # NEW (mpp_data."Work Plan Date")
-    "CLICK Start Date",    # NEW (mpp_data."CLICK Start Date")
-    "CLICK End Date",      # NEW (mpp_data."CLICK End Date")
+    "WPD",                 # (mpp_data."Work Plan Date")
+    "CLICK Start Date",    # (mpp_data."CLICK Start Date")
+    "CLICK End Date",      # (mpp_data."CLICK End Date")
     "Notification Status",
     "SAP Status",
     "DS11",
@@ -43,22 +44,23 @@ def get_environment_table(db_path: str) -> Tuple[List[str], List[Tuple]]:
         cur.execute("""
             SELECT
                 et."Order",
-                COALESCE(m."Project Reporting Year", '') AS "Project Reporting Year",
-                COALESCE(m."MAT", '')                    AS "MAT Code",
-                COALESCE(m."Program", '')                AS "Program",
-                COALESCE(m."Sub-Category", '')           AS "Sub-Category",
-                COALESCE(m."Div", '')                    AS "Div",
-                COALESCE(m."Region", '')                 AS "Region",
-                COALESCE(m."Work Plan Date", '')         AS "WPD",
-                COALESCE(m."CLICK Start Date", '')       AS "CLICK Start Date",
-                COALESCE(m."CLICK End Date", '')         AS "CLICK End Date",
-                COALESCE(et."Notification Status", '')   AS "Notification Status",
-                COALESCE(et."SAP Status", '')            AS "SAP Status",
-                COALESCE(et."DS11", '')                  AS "DS11",
-                COALESCE(et."PC21", '')                  AS "PC21",
+                COALESCE(CAST(m."Notification" AS TEXT), '')      AS "Notification",
+                COALESCE(m."Project Reporting Year", '')          AS "Project Reporting Year",
+                COALESCE(m."MAT", '')                             AS "MAT Code",
+                COALESCE(m."Program", '')                         AS "Program",
+                COALESCE(m."Sub-Category", '')                    AS "Sub-Category",
+                COALESCE(m."Div", '')                             AS "Div",
+                COALESCE(m."Region", '')                          AS "Region",
+                COALESCE(m."Work Plan Date", '')                  AS "WPD",
+                COALESCE(m."CLICK Start Date", '')                AS "CLICK Start Date",
+                COALESCE(m."CLICK End Date", '')                  AS "CLICK End Date",
+                COALESCE(et."Notification Status", '')            AS "Notification Status",
+                COALESCE(et."SAP Status", '')                     AS "SAP Status",
+                COALESCE(et."DS11", '')                           AS "DS11",
+                COALESCE(et."PC21", '')                           AS "PC21",
                 COALESCE(et."Environment Anticipated Out Date", '') AS "Environment Anticipated Out Date",
-                COALESCE(et."Environment Notes", '')     AS "Environment Notes",
-                COALESCE(et."Action", '')                AS "Action"
+                COALESCE(et."Environment Notes", '')              AS "Environment Notes",
+                COALESCE(et."Action", '')                         AS "Action"
             FROM environment_tracker et
             LEFT JOIN mpp_data m ON m."Order" = et."Order"
             ORDER BY et."Order" ASC

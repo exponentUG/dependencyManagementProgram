@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 COLUMNS: List[str] = [
     "Order",
+    "Notification",              # <-- NEW COLUMN
     "Project Reporting Year",
     "MAT Code",
     "Program",
@@ -49,6 +50,7 @@ def get_permit_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     pt."Order",
+                    COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
                     COALESCE(m."Project Reporting Year", '') AS "Project Reporting Year",
                     COALESCE(m."MAT", '')                    AS "MAT Code",
                     COALESCE(m."Program", '')                AS "Program",
@@ -77,6 +79,7 @@ def get_permit_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     pt."Order",
+                    COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
                     COALESCE(m."Project Reporting Year", '') AS "Project Reporting Year",
                     COALESCE(m."MAT", '')                    AS "MAT Code",
                     COALESCE(m."Program", '')                AS "Program",
@@ -104,6 +107,7 @@ def get_permit_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     pt."Order",
+                    '' AS "Notification",
                     '' AS "Project Reporting Year",
                     '' AS "MAT Code",
                     '' AS "Program",
@@ -131,6 +135,7 @@ def get_permit_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             sql = """
                 SELECT
                     pt."Order",
+                    '' AS "Notification",
                     '' AS "Project Reporting Year",
                     '' AS "MAT Code",
                     '' AS "Program",
