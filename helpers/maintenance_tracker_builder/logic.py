@@ -34,7 +34,6 @@ def _to_int_or_none(x: Any) -> Optional[int]:
     except Exception:
         return None
 
-
 def run_import_and_updates(csv_path: str) -> Tuple[int, int, int]:
     """
     1) Load + filter CSV (uses updated wmp_db to include 'Permit Exp Date'), replace mpp_data
@@ -49,7 +48,6 @@ def run_import_and_updates(csv_path: str) -> Tuple[int, int, int]:
     if seeded == 0:
         _, appended = update_order_tracking_list_from_mpp()
     return rows, seeded, appended
-
 
 def export_order_list_to_excel(default_path: str | None = None) -> str:
     """
@@ -101,7 +99,6 @@ def today_strings() -> tuple[str, str]:
     now = datetime.now()
     return now.strftime("%m/%d/%Y"), now.strftime("%m-%d-%Y")
 
-
 # -----------------------------
 # Order Information lookups
 # -----------------------------
@@ -118,7 +115,6 @@ def fetch_mpp_first_for_order(order_text: str) -> Optional[Dict]:
         return None
     return get_mpp_first_row_by_order(order_num)
 
-
 def fetch_sap_summary_for_order(order_text: str) -> Optional[pd.DataFrame]:
     """
     Coerces text -> int and returns SAP summary (one row per Code).
@@ -132,7 +128,6 @@ def fetch_sap_summary_for_order(order_text: str) -> Optional[pd.DataFrame]:
         return None
     return get_sap_code_summary_by_order(order_num)
 
-
 def fetch_epw_first_for_order(order_text: str) -> Optional[Dict]:
     """
     Coerces text -> int and returns the first EPW row (as dict) for that order number,
@@ -145,7 +140,6 @@ def fetch_epw_first_for_order(order_text: str) -> Optional[Dict]:
     except ValueError:
         return None
     return get_epw_first_row_by_order(order_num)
-
 
 def fetch_land_first_for_order(order_text: str) -> Optional[Dict]:
     """

@@ -17,7 +17,7 @@ from helpers.tracker_builder.pull_land_data import pull_land_data
 from helpers.tracker_builder.update_trackers import build_sap_tracker_initial
 from helpers.tracker_builder.manual_inputs import save_pasted_pairs, save_from_tracker_excel
 
-from services.db.maintenance_db import default_db_path
+from services.db.poles_rfc_db import default_db_path
 
 from core.base import ToolView, FONT_H1
 from helpers.poles_rfc_tracker_builder.logic import (

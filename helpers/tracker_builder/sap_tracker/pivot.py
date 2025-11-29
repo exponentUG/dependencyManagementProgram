@@ -5,8 +5,11 @@ import sqlite3
 PENDING_STATUSES = {"ESTS", "UNSE", "ADER", "APPR"}  # case-insensitive
 AP_ALLOWED_STATUSES = {"PEND", "UNSC", "CONS"}       # case-insensitive
 
+
 def update_codes_batch(conn: sqlite3.Connection) -> int:
     cur = conn.cursor()
+
+    # Index to speed up sap_data lookups
     cur.execute('CREATE INDEX IF NOT EXISTS idx_sap_data_order_code ON sap_data("Order","Code")')
 
     # --- PIVOT: include PC21 in the code set
@@ -141,25 +144,85 @@ def update_codes_batch(conn: sqlite3.Connection) -> int:
                  ELSE '-' END AS DS73
         FROM __codes_pivot p
         LEFT JOIN sap_tracker st ON st."Order" = p."Order"
-    """, tuple(PENDING_STATUSES)*10 + tuple(AP_ALLOWED_STATUSES)*4)
+    """, tuple(PENDING_STATUSES) * 10 + tuple(AP_ALLOWED_STATUSES) * 4)
     conn.commit()
 
+    # Index temp + target tables on Order so the final UPDATE is cheaper
+    cur.execute('CREATE INDEX IF NOT EXISTS idx_codes_final_order ON __codes_final("Order")')
+    cur.execute('CREATE INDEX IF NOT EXISTS idx_sap_tracker_order ON sap_tracker("Order")')
+    conn.commit()
+
+    # -------------------------
+    # Single-pass UPDATE
+    # -------------------------
     before = conn.total_changes
+
+    # One UPDATE instead of 14 separate ones; only touch rows that have a match
     cur.executescript("""
-        UPDATE sap_tracker SET "SP56" = (SELECT SP56 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "RP56" = (SELECT RP56 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "SP57" = (SELECT SP57 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "RP57" = (SELECT RP57 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "DS42" = (SELECT DS42 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "PC20" = (SELECT PC20 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "PC21" = (SELECT PC21 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"); -- NEW
-        UPDATE sap_tracker SET "DS76" = (SELECT DS76 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "PC24" = (SELECT PC24 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "DS11" = (SELECT DS11 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "AP10" = (SELECT AP10 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "AP25" = (SELECT AP25 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "DS28" = (SELECT DS28 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
-        UPDATE sap_tracker SET "DS73" = (SELECT DS73 FROM __codes_final f WHERE f."Order" = sap_tracker."Order");
+        UPDATE sap_tracker
+        SET
+            "SP56" = COALESCE(
+                (SELECT f.SP56 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "SP56"
+            ),
+            "RP56" = COALESCE(
+                (SELECT f.RP56 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "RP56"
+            ),
+            "SP57" = COALESCE(
+                (SELECT f.SP57 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "SP57"
+            ),
+            "RP57" = COALESCE(
+                (SELECT f.RP57 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "RP57"
+            ),
+            "DS42" = COALESCE(
+                (SELECT f.DS42 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "DS42"
+            ),
+            "PC20" = COALESCE(
+                (SELECT f.PC20 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "PC20"
+            ),
+            "PC21" = COALESCE(
+                (SELECT f.PC21 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "PC21"
+            ),
+            "DS76" = COALESCE(
+                (SELECT f.DS76 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "DS76"
+            ),
+            "PC24" = COALESCE(
+                (SELECT f.PC24 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "PC24"
+            ),
+            "DS11" = COALESCE(
+                (SELECT f.DS11 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "DS11"
+            ),
+            "AP10" = COALESCE(
+                (SELECT f.AP10 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "AP10"
+            ),
+            "AP25" = COALESCE(
+                (SELECT f.AP25 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "AP25"
+            ),
+            "DS28" = COALESCE(
+                (SELECT f.DS28 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "DS28"
+            ),
+            "DS73" = COALESCE(
+                (SELECT f.DS73 FROM __codes_final f WHERE f."Order" = sap_tracker."Order"),
+                "DS73"
+            )
+        WHERE EXISTS (
+            SELECT 1
+            FROM __codes_final f
+            WHERE f."Order" = sap_tracker."Order"
+        );
     """)
+
     conn.commit()
     return conn.total_changes - before
