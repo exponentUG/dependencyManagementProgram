@@ -13,6 +13,7 @@ from ledgers.tracker_conditions_ledger.maintenance import (
     REQUIRED_PM_FLAG,
     NOTIF_STATUS_TO_REMOVE,
     ALLOWED_SAP_STATUS,
+    NOT_ALLOWED_PRIORITY
 )
 
 # ------------------------
