@@ -109,7 +109,8 @@ def save_from_tracker_excel(conn: sqlite3.Connection, xlsx_path: str) -> int:
 
     - Adds any new Orders found in those sheets.
     - Overwrites note columns if non-blank values exist in Excel.
-    - Keeps existing Environment Anticipated Out Date + Sent to OU Date untouched.
+    - Overwrites Environment Anticipated Out Date + Sent to OU Date
+      if non-blank values exist in Excel.
     """
     _ensure_schema(conn)
 
@@ -126,7 +127,7 @@ def save_from_tracker_excel(conn: sqlite3.Connection, xlsx_path: str) -> int:
     if "Order" in existing_df.columns:
         existing_df["Order"] = pd.to_numeric(existing_df["Order"], errors="coerce").astype("Int64")
 
-    # 2) Read each required sheet and extract Order + Notes
+    # 2) Read each required sheet and extract Order + Notes (+ dates where applicable)
     extracted_frames: List[pd.DataFrame] = []
     xl = pd.ExcelFile(xlsx_path)
 
@@ -141,13 +142,30 @@ def save_from_tracker_excel(conn: sqlite3.Connection, xlsx_path: str) -> int:
             # If expected columns missing, skip
             continue
 
-        sub = df[[order_col, notes_col]].copy()
+        # Start with Order and the notes column
+        cols_to_take = [order_col, notes_col]
+
+        # Add Environment Anticipated Out Date from Environment sheet, if present
+        if sheet == "Environment" and "Environment Anticipated Out Date" in df.columns:
+            cols_to_take.append("Environment Anticipated Out Date")
+
+        # Add Sent to OU Date from Joint Pole sheet, if present
+        if sheet == "Joint Pole" and "Sent to OU Date" in df.columns:
+            cols_to_take.append("Sent to OU Date")
+
+        sub = df[cols_to_take].copy()
         sub.rename(columns={order_col: "Order", notes_col: target_col}, inplace=True)
         sub["Order"] = pd.to_numeric(sub["Order"], errors="coerce").astype("Int64")
 
-        # Normalize notes: blank/whitespace/"-" -> NA
+        # Normalize core notes column: blank/whitespace/"-" -> NA
         sub[target_col] = sub[target_col].astype(str).str.strip()
         sub.loc[sub[target_col].isin(["", "nan", "NaN", "-"]), target_col] = pd.NA
+
+        # Normalize date columns similarly (treat blanks as NA)
+        for dcol in ("Environment Anticipated Out Date", "Sent to OU Date"):
+            if dcol in sub.columns:
+                sub[dcol] = sub[dcol].astype(str).str.strip()
+                sub.loc[sub[dcol].isin(["", "nan", "NaN", "-"]), dcol] = pd.NA
 
         extracted_frames.append(sub.dropna(subset=["Order"]))
 
@@ -162,25 +180,35 @@ def save_from_tracker_excel(conn: sqlite3.Connection, xlsx_path: str) -> int:
     all_orders = pd.Series(pd.concat([existing_df["Order"], notes_df["Order"]]).unique(), dtype="Int64")
     all_orders_df = pd.DataFrame({"Order": all_orders})
 
-    # 4) Start from existing (so we preserve Env Anticipated + Sent to OU)
+    # 4) Start from existing (so we preserve anything not overwritten by Excel)
     merged = all_orders_df.merge(existing_df, on="Order", how="left")
 
-    # Ensure note columns exist
-    for col in ["Permit Notes", "Land Notes", "FAA Notes", "Joint Pole Notes", "Environment Notes"]:
+    # Ensure all manual columns exist in merged
+    for col in MANUAL_COLS:
         if col not in merged.columns:
             merged[col] = pd.NA
 
-    # 5) Overlay non-null excel notes by Order
+    # 5) Overlay non-null excel values by Order (notes + the two dates)
     merged = merged.merge(notes_df, on="Order", how="left", suffixes=("", "_new"))
 
-    for col in ["Permit Notes", "Land Notes", "FAA Notes", "Joint Pole Notes", "Environment Notes"]:
+    overlay_cols = [
+        "Permit Notes",
+        "Land Notes",
+        "FAA Notes",
+        "Joint Pole Notes",
+        "Environment Notes",
+        "Environment Anticipated Out Date",
+        "Sent to OU Date",
+    ]
+
+    for col in overlay_cols:
         new_col = f"{col}_new"
         if new_col in merged.columns:
             merged[col] = merged[new_col].combine_first(merged[col])
             merged.drop(columns=[new_col], inplace=True)
 
     # 6) Write back: UPSERT row-by-row
-    cols_to_write = MANUAL_COLS  # includes preserved columns too
+    cols_to_write = MANUAL_COLS  # includes preserved + updated columns
     before = conn.total_changes
     cur = conn.cursor()
 

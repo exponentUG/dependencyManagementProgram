@@ -26,7 +26,7 @@ _disq_re = re.compile("|".join(_DISQUALIFY), re.IGNORECASE | re.DOTALL)
 _POSITIVE_NO_PERMIT = [
     # Existing
     r"\bno\s+additional\s+land\s+rights\s+(needed|required)\b",
-    r"\bno\s+land\s+rights\s+(needed|required)\b",
+    r"\bno\s+land\s+rights\s+(needed|required)?\b",
     r"\bno\s+land\s+review\s+required\b",
     r"\bland\s+review\s+completed\b",
     r"\bcompleted\s+intake\b.*\bno\s+additional\s+land\s+rights\s+(required|needed)\b",
@@ -46,14 +46,19 @@ _POSITIVE_NO_PERMIT = [
     r"\breplied\s+to\b.*\bno\s+caltrans\s+permit\s+(is\s+)?needed\b",
     r"\brelinquish\w*\b.*\b(secures|no\s+additional\s+land\s+rights)\b",
 
-    # NEW targeted variants you provided
-    r"\bno\s*(?:cal\s*trans|caltrans)\s*(?:/|or)?\s*(?:rr|railroad)?\s*permit\s+(?:is\s+)?(?:required|needed)\b",
-    r"\bno\s*(?:rr|railroad)\s+permit\s+(?:is\s+)?(?:required|needed)\b",
-    r"\ball\s+work\s+to\s+take\s+place\s+within\s+public\s+road\s+right[-\s]?of[-\s]?way\b.*\b(released\s+from\s+land|job\s+released\s+from\s+land)\b",
-    r"\bexisting\s+land\s+rights\b.*\b(cleared\s+land\s+tasks?|land\s+tasks?\s+(?:cleared|completed))\b",
-    r"\b(?:cal\s*trans|caltrans)\b.*\bpermit\s+will\s+not\s+be\s+required\b",
-    r"\bwork\s+on\s+private\s+property\b.*\b(cal\s*trans|caltrans)\s+annual\s+permit\b.*\bno\s+new\s+land\s+rights\b",
-    r"\blike[-\s]?for[-\s]?like\b.*\bno\s+new\s+land\s+rights\b",
+    # --- NEW: variants from your examples ---
+
+    # "No Caltrans permitting required ..."
+    r"\bno\s*(?:cal\s*trans|caltrans)\s+permit\w*\s+(?:is\s+)?(?:required|needed)\b",
+
+    # Generic "no permit required."
+    r"\bno\s+permit\s+required\b",
+
+    # "Land rights secured per LD..., no additional Land needed"
+    r"\bno\s+additional\s+land\s+needed\b",
+
+    # "No new land rights needed ..."
+    r"\bno\s+(?:new\s+)?land\s+rights\s+needed\b",
 ]
 
 # Fuzzy tails that usually mean “no permit/rights” when not disqualified
