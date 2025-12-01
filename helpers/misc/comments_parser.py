@@ -71,6 +71,7 @@ _POS_FUZZY = [
 _pos_no_permit_re = [re.compile(p, re.IGNORECASE | re.DOTALL) for p in _POSITIVE_NO_PERMIT]
 _pos_fuzzy_re     = [re.compile(p, re.IGNORECASE | re.DOTALL) for p in _POS_FUZZY]
 
+
 def _matches_no_permit(text: str) -> bool:
     t = text or ""
     for rx in _pos_no_permit_re:
@@ -97,11 +98,14 @@ _EXPIRES_RE = re.compile(
     re.IGNORECASE,
 )
 
+
 def _yyyy_from_two(yy: int) -> int:
     return 2000 + yy
 
+
 def _fmt_mdy(m: int, d: int, y: int) -> str:
     return f"{m}/{d}/{y}"
+
 
 def _extract_expiry(text: str) -> Optional[str]:
     m = _EXPIRES_RE.search(text or "")
@@ -134,6 +138,7 @@ _ANTICIPATED_DATE_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+
 def _extract_anticipated(text: str) -> Optional[str]:
     m = _ANTICIPATED_DATE_RE.search(text or "")
     if not m:
@@ -143,6 +148,7 @@ def _extract_anticipated(text: str) -> Optional[str]:
     if not (1 <= mm <= 12 and 1 <= dd <= 31 and 2000 <= yyyy <= 2100):
         return None
     return _fmt_mdy(mm, dd, yyyy)
+
 
 def _matches_applied(text: str) -> bool:
     t = text or ""
@@ -154,22 +160,34 @@ def _matches_applied(text: str) -> bool:
 
 # We look for explicit “monument” phrases with completion/no-find signals.
 _MONUMENT_POSITIVES = [
-    # “Monument preservation research performed. No evidence of monumentation found …”
-    r"\bmonument\s+preservation\s+research\s+performed\b.*\bno\s+evidence\s+of\s+monument(?:ation)?\s+found\b",
+    # “Monument preservation research/field visit/analysis/review performed/completed ... no evidence of monumentation/monuments found”
+    r"\bmonument\s+preservation\s+(?:research|field\s+visit|analysis|review)\s+(?:performed|completed)\b.*\bno\s+(?:evidence\s+of\s+monument(?:ation)?|monuments?)\s+found\b",
+
+    # More generic "no evidence of monumentation found"
+    r"\bno\s+evidence\s+of\s+monument(?:ation)?\s+found\b",
+
+    # “no monuments found” variants
+    r"\bno\s+monuments?\s+found\b",
+
     # “no monument found per …”
     r"\bno\s+monument\s+found\b",
-    # “monument preservation review completed, no monuments found”
-    r"\bmonument\s+preservation\s+review\s+completed\b.*\bno\s+monuments?\s+found\b",
-    # “Monuments were not found within construction limits … Task Complete”
+
+    # “monument preservation review completed, no monuments found” (allow analysis/review)
+    r"\bmonument\s+preservation\s+(?:review|analysis)\s+completed\b.*\bno\s+monuments?\s+found\b",
+
+    # “Monuments were not found within construction limits …”
     r"\bmonuments?\s+were\s+not\s+found\b.*\bconstruction\s+limits\b",
     r"\bmonuments?\s+were\s+not\s+found\b.*\btask\s+complete\b",
-    # “No Monument in vicinity …”
-    r"\bno\s+monument\s+in\s+vicinity\b",
+
+    # “No Monument in vicinity …” (including leading underscores like "_No Monument...")
+    r"(?:\b|_)no\s+monument\s+in\s+vicinity\b",
+
     # generic but still specific: “monument … not found”
     r"\bmonuments?\b.*\bnot\s+found\b",
 ]
 
 _monument_done_re = [re.compile(p, re.IGNORECASE | re.DOTALL) for p in _MONUMENT_POSITIVES]
+
 
 def _matches_monument_done(text: str) -> bool:
     t = text or ""
@@ -184,6 +202,7 @@ def _matches_monument_done(text: str) -> bool:
 # ============================================================
 # 5) Main entry
 # ============================================================
+
 
 def parse_comment_semantics(latest_comment: str) -> Tuple[str, str, str]:
     """
