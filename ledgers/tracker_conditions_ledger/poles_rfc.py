@@ -4,7 +4,7 @@ ALLOWED_MAT = {
 }
 
 #Project Reporting Years we are tracking
-ALLOWED_YEARS = {2025, 2026, 2027, 2028, 2029, 2030}
+ALLOWED_YEARS = {2026}
 
 #Project Managed flag we are tracking
 REQUIRED_PM_FLAG = "N"
@@ -15,3 +15,4 @@ NOTIF_STATUS_TO_REMOVE = "COMP"
 #Allowed SAP primiary user status
 ALLOWED_SAP_STATUS = ["UNSC", "CONS"]
 
+#remove the jobs thay say "mega-bundled jobs" as Y
