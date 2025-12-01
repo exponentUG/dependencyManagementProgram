@@ -148,7 +148,7 @@ def _run_tm_for_orders(session, orders: List[int], destination_folder: str, file
 
     # Wait for popup
     while session.Children.Count < 2:
-        time.sleep(1)
+        time.sleep(5)
 
     # Paste orders into selection
     order_list = "\r\n".join(map(str, orders)) + "\r\n"
@@ -169,7 +169,7 @@ def _run_tm_for_orders(session, orders: List[int], destination_folder: str, file
     session.findById("wnd[0]/usr/btn%_S_MNCOD_%_APP_%-VALU_PUSH").press()
 
     while session.Children.Count < 2:
-        time.sleep(1)
+        time.sleep(5)
 
     session.findById("wnd[1]").sendVKey(24)
     session.findById("wnd[1]/tbar[0]/btn[8]").press()
@@ -185,7 +185,7 @@ def _run_tm_for_orders(session, orders: List[int], destination_folder: str, file
     session.findById("wnd[0]/usr/cntlALV_CONTAINER/shellcont/shell").selectContextMenuItem("&LOAD")
 
     while session.Children.Count < 2:
-        time.sleep(1)
+        time.sleep(5)
 
     shell = session.findById(
         "wnd[1]/usr/ssubD0500_SUBSCREEN:SAPLSLVC_DIALOG:0501/"
@@ -256,7 +256,7 @@ def run_multi_tm_export(parent: tk.Misc, initial_dest: Optional[str] = None) -> 
     session.findById("wnd[0]").maximize()
 
     # --- Prepare trackers & filenames ---
-    today_str = datetime.today().strftime("%m/%d/%Y")  # MM/DD/YYYY
+    today_str = datetime.today().strftime("%m%d%Y")  # MMDDYYYY
 
     trackers: List[Tuple[str, Any]] = [
         ("Maintenance", maintenance_db),
@@ -269,8 +269,7 @@ def run_multi_tm_export(parent: tk.Misc, initial_dest: Optional[str] = None) -> 
         "Maintenance": f"Maintenance SAP Data - {today_str}.xlsx",
         "Poles": f"Poles SAP Data - {today_str}.xlsx",
         "Poles RFC": f"Poles RFC SAP Data - {today_str}.xlsx",
-        # Per your spec: "WMP RFC Data - MM/DD/YYYY"
-        "WMP": f"WMP RFC Data - {today_str}.xlsx",
+        "WMP": f"WMP SAP Data - {today_str}.xlsx",
     }
 
     created_files: List[str] = []

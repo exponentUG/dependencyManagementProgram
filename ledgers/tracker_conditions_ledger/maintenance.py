@@ -1,6 +1,7 @@
 #MAT Codes we are tracking
 ALLOWED_MAT = {
-    "2AA","2AC","2AE","2AF","2AP","2BA","2BD","KAA","KAF","KAQ","KBA","KBC"
+    "2AA","2AC"
+    # ,"2AE","2AF","2AP","2BA","2BD","KAA","KAF","KAQ","KBA","KBC"
 }
 
 #Project Reporting Years we are tracking
