@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import Any, Dict, List
 
-from core.base import ToolView, FONT_H1
+from core.base import ToolView
 
 # DB modules for each dependency tracker
 # Make sure these modules exist with the expected API:
@@ -16,9 +16,15 @@ from core.base import ToolView, FONT_H1
 #   - update_order_tracking_list_from_mpp() -> tuple[int, int]
 from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db
 
+# SAP multi-export helper (new)
+from helpers.sap_reports.master_tracker_builder.task_management_master import (
+    run_multi_tm_export,
+)
+
 
 class BusyPopup(tk.Toplevel):
     """Simple indeterminate spinner modal for long-running tasks."""
+
     def __init__(self, parent, title: str = "Working"):
         super().__init__(parent)
         self.title(title)
@@ -57,12 +63,15 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
     Step 1: Take a single MPP CSV and update mpp_data + order_tracking_list
     for ALL dependency trackers (WMP, Maintenance, Poles, Poles RFC) in one go.
+
+    Step 2 (Row 6): Extract SAP Data for all trackers via SAP GUI automation.
     """
 
     def __init__(self, master: tk.Misc | None = None, **kwargs: Any) -> None:
         super().__init__(master, **kwargs)
 
         self.path_var = tk.StringVar()
+        self.var_sap = tk.StringVar()  # used to display / prefill destination folder
         self._is_running = False
 
         self._build_ui()
@@ -74,7 +83,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
 
-        # ---- Row 3: Step title (mirrors the other tracker_builder UIs) ----
+        # ---- Row 3: Step 1 title (mirrors the other tracker_builder UIs) ----
         ttk.Label(
             self,
             text="Step 1: Upload latest copy of MPP and update all tracker databases",
@@ -104,6 +113,32 @@ class MASTER_TRACKER_BUILDER(ToolView):
         )
         self.generate_btn.grid(row=0, column=3, sticky="w")
 
+        # ---- Row 6: SAP Data (all trackers) ----
+        # Mirrors the WMP tracker row-6 layout, but here:
+        #   - Entry shows the destination folder (if known)
+        #   - Browse lets user pick a default folder
+        #   - "Extract SAP Data" runs SAP automation for all 4 DBs
+        fr6 = ttk.Frame(self)
+        fr6.grid(row=6, column=0, columnspan=6, sticky="ew", padx=16, pady=4)
+        fr6.columnconfigure(1, weight=1)
+
+        ttk.Label(fr6, text="SAP Data (all trackers)").grid(
+            row=0, column=0, sticky="w", padx=(0, 8)
+        )
+        ttk.Entry(fr6, textvariable=self.var_sap).grid(
+            row=0, column=1, sticky="ew", padx=(0, 8)
+        )
+        ttk.Button(
+            fr6,
+            text="Browse…",
+            command=self._browse_sap_folder,
+        ).grid(row=0, column=2, sticky="w", padx=(0, 8))
+        ttk.Button(
+            fr6,
+            text="Extract SAP Data",
+            command=self._on_extract_sap_data,
+        ).grid(row=0, column=3, sticky="w")
+
         # Let middle columns expand
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
@@ -123,6 +158,11 @@ class MASTER_TRACKER_BUILDER(ToolView):
         if fp:
             self.path_var.set(fp)
 
+    def _browse_sap_folder(self) -> None:
+        folder = filedialog.askdirectory(title="Select SAP Export Folder")
+        if folder:
+            self.var_sap.set(folder)
+
     def _update_generate_state(self) -> None:
         if self._is_running:
             # Don't re-enable while a run is in progress
@@ -132,7 +172,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         self.generate_btn.configure(state=("normal" if ok else "disabled"))
 
     # ------------------------------------------------------------------
-    # Core action: update all MPP DBs
+    # Core action: update all MPP DBs (Step 1)
     # ------------------------------------------------------------------
     def _on_generate(self) -> None:
         path = self.path_var.get().strip()
@@ -235,7 +275,9 @@ class MASTER_TRACKER_BUILDER(ToolView):
                                 f"new orders added = {r['inserted']}"
                             )
 
-                    messagebox.showerror("MPP Update Complete (with errors)", "\n".join(lines))
+                    messagebox.showerror(
+                        "MPP Update Complete (with errors)", "\n".join(lines)
+                    )
                 else:
                     # All good
                     lines = ["MPP data updated successfully for all trackers:", ""]
@@ -249,3 +291,50 @@ class MASTER_TRACKER_BUILDER(ToolView):
             self.after(0, done)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Step 2: Extract SAP Data for all trackers
+    # ------------------------------------------------------------------
+    def _on_extract_sap_data(self) -> None:
+        """
+        Button handler for 'Extract SAP Data' (Master).
+
+        - Shows SAPDetailsDialog (username, password, destination folder).
+        - Opens SAP once, logs in once.
+        - Loops over Maintenance, Poles, Poles RFC, WMP:
+            * pulls each DB's order_tracking_list
+            * runs ZIWRE_TM_REPORT
+            * exports XXL to a default file name based on today's date
+            * sends VKey(15) between runs.
+        """
+        dest_hint = self.var_sap.get().strip() or None
+
+        try:
+            result = run_multi_tm_export(self, initial_dest=dest_hint)
+        except Exception as e:
+            messagebox.showerror(
+                "Extract SAP Data Failed",
+                f"{type(e).__name__}: {e}",
+            )
+            return
+
+        if not result:
+            # User likely cancelled the SAP details dialog
+            return
+
+        destination = result.get("destination", "")
+        files = result.get("files", [])
+
+        if destination:
+            self.var_sap.set(destination)
+
+        if files:
+            msg_lines = ["Exported the following files:", ""]
+            for f in files:
+                msg_lines.append(f"• {os.path.join(destination, f)}")
+            messagebox.showinfo("SAP Export Complete", "\n".join(msg_lines))
+        else:
+            messagebox.showinfo(
+                "SAP Export Complete",
+                "No files were exported (no orders found in the trackers).",
+            )
