@@ -15,3 +15,6 @@ NOTIF_STATUS_TO_REMOVE = "COMP"
 #Allowed SAP primiary user status
 ALLOWED_SAP_STATUS = ["PEND"]
 
+#Not allowed prioriy
+NOT_ALLOWED_PRIORITY = "B"
+

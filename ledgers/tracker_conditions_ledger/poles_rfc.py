@@ -15,4 +15,7 @@ NOTIF_STATUS_TO_REMOVE = "COMP"
 #Allowed SAP primiary user status
 ALLOWED_SAP_STATUS = ["UNSC", "CONS"]
 
+#Not allowed prioriy
+NOT_ALLOWED_PRIORITY = "B"
+
 #remove the jobs thay say "mega-bundled jobs" as Y

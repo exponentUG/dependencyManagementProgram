@@ -1,20 +1,16 @@
 # helpers/sap_reports/master_tracker_builder/task_management_master.py
 from __future__ import annotations
-
 import os
 import time
 import subprocess
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Optional
-
 import tkinter as tk
 from tkinter import ttk, filedialog
-
 import win32com.client
 import pyperclip
 
 from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db
-
 
 TASKS = [
     "SP56",

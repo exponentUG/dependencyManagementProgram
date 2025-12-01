@@ -1,6 +1,6 @@
 #MAT Codes we are tracking
 ALLOWED_MAT = {
-    "2AA","2AC","2AE","2AF","2AP","2BA","2BD","KAA","KAF","KAQ","KBA","KBC"
+    "2AA", "2AB", "2AC", "2AE", "2AF", "2AP", "2AS", "2BA", "2BB", "2BD", "2BF", "2BP", "KAA", "KAC", "KAD", "KAF", "KAH", "KAM", "KAO", "KAP", "KAQ", "KAR", "KBA", "KBC", "KBP"
 }
 
 #Project Reporting Years we are tracking
@@ -16,4 +16,4 @@ NOTIF_STATUS_TO_REMOVE = "COMP"
 ALLOWED_SAP_STATUS = ["PEND"]
 
 #Not allowed prioriy
-NOT_ALLOWED_PRIORITY = ["B"]
+NOT_ALLOWED_PRIORITY = "B"

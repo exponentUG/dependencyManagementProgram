@@ -268,6 +268,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
     pm_u    = df["Project Managed Flag"].str.upper()
     notif_u = df["Notif Status"].str.upper()
     sap_status = df["Primary Status"].str.upper()
+    priority = df["Priority"].str.upper()
 
     allowed_mat   = {m.upper() for m in ALLOWED_MAT}
     # treat PRY as string for filtering to avoid full numeric conversion
@@ -281,6 +282,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         & (pm_u == REQUIRED_PM_FLAG.upper())
         & (notif_u != NOTIF_STATUS_TO_REMOVE)
         & sap_status.isin(allowed_sap_status)
+        & (priority != NOT_ALLOWED_PRIORITY.upper())
     )
 
     df = df.loc[mask].reset_index(drop=True)

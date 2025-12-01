@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import threading
+import sqlite3
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -18,6 +19,7 @@ from helpers.sap_reports.master_tracker_builder.task_management_master import (
 from helpers.tracker_builder.pull_sap_data import pull_sap_data
 from helpers.tracker_builder.pull_epw_data import pull_epw_data
 from helpers.tracker_builder.pull_land_data import pull_land_data
+from helpers.tracker_builder.update_trackers import build_sap_tracker_initial
 
 from ledgers.tracker_conditions_ledger.wmp import ALLOWED_MAT as ALLOWED_MAT_WMP
 from ledgers.tracker_conditions_ledger.maintenance import (
@@ -74,6 +76,9 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
     Step 2: Manage SAP / EPW / Land source files for all trackers in one place
             and run the extraction into each DB.
+
+    Tracker Tools: Run build_sap_tracker_initial for all trackers
+                   from a single "Update Trackers" button.
     """
 
     def __init__(self, master: tk.Misc | None = None, **kwargs: Any) -> None:
@@ -106,6 +111,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
             v.trace_add("write", lambda *_: self._update_step2_state())
 
         self.btn_extract: ttk.Button | None = None
+        self.btn_update_trackers: ttk.Button | None = None
 
         self._build_ui()
         self._wire_signals()
@@ -236,6 +242,24 @@ class MASTER_TRACKER_BUILDER(ToolView):
         )
         self.btn_extract.grid(row=0, column=0)
 
+        # ---- Row 14: Tracker Tools heading ----
+        ttk.Label(self, text="Tracker Tools", font=FONT_H1).grid(
+            row=14, column=0, columnspan=6, sticky="w", padx=16, pady=(12, 4)
+        )
+
+        # ---- Row 15: Tools row (left-aligned Update Trackers) ----
+        fr_tools = ttk.Frame(self)
+        fr_tools.grid(
+            row=15, column=0, columnspan=6, sticky="w", padx=16, pady=(0, 8)
+        )
+
+        self.btn_update_trackers = ttk.Button(
+            fr_tools,
+            text="Update Trackers",
+            command=self._on_update_trackers,
+        )
+        self.btn_update_trackers.grid(row=0, column=0, padx=(0, 8))
+
         # Let middle columns expand
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
@@ -312,7 +336,9 @@ class MASTER_TRACKER_BUILDER(ToolView):
                     # Heavy work in the background thread
                     df = db_mod.load_and_filter_csv(path)
                     rows = db_mod.replace_mpp_data(df)
-                    existing_before, inserted = db_mod.update_order_tracking_list_from_mpp()
+                    existing_before, inserted = (
+                        db_mod.update_order_tracking_list_from_mpp()
+                    )
 
                     results.append(
                         {
@@ -465,10 +491,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
             self.var_epw.get().strip(),
             self.var_land.get().strip(),
         ]
-        all_ok = (
-            bool(required_paths)
-            and all(p and os.path.isfile(p) for p in required_paths)
-        )
+        all_ok = all(p and os.path.isfile(p) for p in required_paths)
         self.btn_extract.configure(state=("normal" if all_ok else "disabled"))
 
     def _on_extract_step2(self) -> None:
@@ -569,5 +592,133 @@ class MASTER_TRACKER_BUILDER(ToolView):
                     messagebox.showerror("Extraction Failed", err_text)
 
                 self.after(0, done_err)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Tracker Tools: Update Trackers for all DBs
+    # ------------------------------------------------------------------
+    def _ensure_perf_indexes(self, db_path: str) -> None:
+        """
+        Create helpful indexes and set WAL/NORMAL pragmas.
+        Safe to call repeatedly for any of the dependency DBs.
+        """
+        try:
+            with sqlite3.connect(db_path) as conn:
+                cur = conn.cursor()
+                cur.executescript(
+                    """
+                    PRAGMA journal_mode=WAL;
+                    PRAGMA synchronous=NORMAL;
+
+                    CREATE INDEX IF NOT EXISTS idx_mpp_order        ON mpp_data("Order");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_project_year ON mpp_data("Project Reporting Year");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_mat          ON mpp_data("MAT");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_program      ON mpp_data("Program");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_subcat       ON mpp_data("Sub-Category");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_div          ON mpp_data("Div");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_region       ON mpp_data("Region");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_click_start  ON mpp_data("CLICK Start Date");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_click_end    ON mpp_data("CLICK End Date");
+                    CREATE INDEX IF NOT EXISTS idx_mpp_wpd          ON mpp_data("Work Plan Date");
+
+                    CREATE INDEX IF NOT EXISTS idx_saptracker_order ON sap_tracker("Order");
+                    CREATE INDEX IF NOT EXISTS idx_envtracker_order ON environment_tracker("Order");
+                    CREATE INDEX IF NOT EXISTS idx_opendep_order    ON open_dependencies("Order");
+                    CREATE INDEX IF NOT EXISTS idx_epw_ordernum     ON epw_data("Order Number");
+                    CREATE INDEX IF NOT EXISTS idx_manual_order     ON manual_tracker("Order");
+                    """
+                )
+                conn.commit()
+        except Exception:
+            # Never block the UI for indexing errors
+            pass
+
+    def _on_update_trackers(self) -> None:
+        """
+        Run build_sap_tracker_initial for all four trackers (WMP, Maintenance,
+        Poles, Poles RFC) from a single button.
+
+        Mirrors the per-program _on_update_trackers pattern but aggregated.
+        """
+        trackers = [
+            ("WMP", wmp_db),
+            ("Maintenance", maintenance_db),
+            ("Poles", poles_db),
+            ("Poles RFC", poles_rfc_db),
+        ]
+
+        busy = BusyPopup(self, title="Updating Trackers (All Programs)")
+        if self.btn_update_trackers is not None:
+            self.btn_update_trackers.configure(state="disabled")
+        self.configure(cursor="watch")
+        self.update_idletasks()
+
+        def worker() -> None:
+            results: List[Tuple[str, int, int]] = []  # (label, affected, total_orders)
+            errors: List[Tuple[str, str]] = []        # (label, error_text)
+
+            for label, db_mod in trackers:
+                db_path = db_mod.default_db_path()
+
+                if not os.path.isfile(db_path):
+                    errors.append(
+                        (label, f"Database not found:\n{db_path}\nRun Extract/Generate first.")
+                    )
+                    continue
+
+                try:
+                    # make sure indexes exist before heavy rebuilds
+                    self._ensure_perf_indexes(db_path)
+
+                    affected, total_orders = build_sap_tracker_initial(db_path)
+                    results.append((label, affected, total_orders))
+                except Exception as e:
+                    errors.append((label, f"{type(e).__name__}: {e}"))
+
+            def done() -> None:
+                busy.finish()
+                if self.btn_update_trackers is not None:
+                    self.btn_update_trackers.configure(state="normal")
+                self.configure(cursor="")
+
+                if not results and errors:
+                    # Everything failed
+                    msg_lines = ["Tracker updates failed for all programs:", ""]
+                    for label, err in errors:
+                        msg_lines.append(f"- {label}: {err}")
+                    messagebox.showerror("Update Failed", "\n".join(msg_lines))
+                    return
+
+                # Build success/partial message
+                msg_lines: List[str] = []
+
+                if results:
+                    msg_lines.append("SAP Trackers updated successfully:")
+                    msg_lines.append("")
+                    for label, affected, total in results:
+                        msg_lines.append(
+                            f"• {label}: sap_tracker updated for {total:,} orders; "
+                            f"Affected rows (inserted/updated): {affected:,}"
+                        )
+                    msg_lines.append("")
+                    msg_lines.append(
+                        "Columns built per tracker include: Order, Primary Status, SP56, RP56, "
+                        "SP57, RP57, DS42, PC20, DS76, PC24, DS11, PC21, AP10, AP25, DS28, DS73; "
+                        "open_dependencies, permit, land, FAA, environment, joint pole, and misc task trackers are refreshed as well."
+                    )
+
+                if errors:
+                    msg_lines.append("")
+                    msg_lines.append("Some trackers could not be updated:")
+                    for label, err in errors:
+                        msg_lines.append(f"- {label}: {err}")
+                    messagebox.showwarning(
+                        "Update Complete (partial)", "\n".join(msg_lines)
+                    )
+                else:
+                    messagebox.showinfo("Update Complete", "\n".join(msg_lines))
+
+            self.after(0, done)
 
         threading.Thread(target=worker, daemon=True).start()

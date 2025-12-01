@@ -7,7 +7,7 @@ from typing import Iterable, List, Tuple, Optional, Dict
 from datetime import datetime
 import pandas as pd
 from pathlib import Path
-from ledgers.tracker_conditions_ledger.poles_rfc import ALLOWED_MAT, ALLOWED_YEARS, REQUIRED_PM_FLAG, NOTIF_STATUS_TO_REMOVE, ALLOWED_SAP_STATUS
+from ledgers.tracker_conditions_ledger.poles_rfc import ALLOWED_MAT, ALLOWED_YEARS, REQUIRED_PM_FLAG, NOTIF_STATUS_TO_REMOVE, ALLOWED_SAP_STATUS, NOT_ALLOWED_PRIORITY
 
 # ------------------------
 # Paths & DB location
@@ -261,7 +261,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
     pm_u    = df["Project Managed Flag"].str.upper()
     notif_u = df["Notif Status"].str.upper()
     sap_status = df["Primary Status"].str.upper()
-
+    priority = df["Priority"].str.upper()
 
     allowed_mat   = {m.upper() for m in ALLOWED_MAT}
     # treat PRY as string for filtering to avoid full numeric conversion
@@ -275,6 +275,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         & (pm_u == REQUIRED_PM_FLAG.upper())
         & (notif_u != NOTIF_STATUS_TO_REMOVE)
         & sap_status.isin(allowed_sap_status)
+        & (priority != NOT_ALLOWED_PRIORITY.upper())
     )
 
     df = df.loc[mask].reset_index(drop=True)
