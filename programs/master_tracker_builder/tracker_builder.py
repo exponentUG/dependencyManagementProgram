@@ -1,24 +1,31 @@
-# programs/master_tracker_builder/tracker_builder.py
 from __future__ import annotations
 
 import os
 import threading
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from datetime import datetime
 from typing import Any, Dict, List
 
-from core.base import ToolView
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
 
-# DB modules for each dependency tracker
-# Make sure these modules exist with the expected API:
-#   - load_and_filter_csv(csv_path: str) -> pd.DataFrame
-#   - replace_mpp_data(df: pd.DataFrame) -> int
-#   - update_order_tracking_list_from_mpp() -> tuple[int, int]
+from core.base import ToolView, FONT_H1  # FONT_H1 may be unused but is fine
+
 from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db
 
-# SAP multi-export helper (new)
 from helpers.sap_reports.master_tracker_builder.task_management_master import (
     run_multi_tm_export,
+)
+from helpers.tracker_builder.pull_sap_data import pull_sap_data
+from helpers.tracker_builder.pull_epw_data import pull_epw_data
+from helpers.tracker_builder.pull_land_data import pull_land_data
+
+from ledgers.tracker_conditions_ledger.wmp import ALLOWED_MAT as ALLOWED_MAT_WMP
+from ledgers.tracker_conditions_ledger.maintenance import (
+    ALLOWED_MAT as ALLOWED_MAT_MAINT,
+)
+from ledgers.tracker_conditions_ledger.poles import ALLOWED_MAT as ALLOWED_MAT_POLES
+from ledgers.tracker_conditions_ledger.poles_rfc import (
+    ALLOWED_MAT as ALLOWED_MAT_POLES_RFC,
 )
 
 
@@ -62,17 +69,43 @@ class MASTER_TRACKER_BUILDER(ToolView):
     Master Tracker Builder
 
     Step 1: Take a single MPP CSV and update mpp_data + order_tracking_list
-    for ALL dependency trackers (WMP, Maintenance, Poles, Poles RFC) in one go.
+            for ALL dependency trackers (WMP, Maintenance, Poles, Poles RFC)
+            in one go.
 
-    Step 2 (Row 6): Extract SAP Data for all trackers via SAP GUI automation.
+    Step 2: Manage SAP / EPW / Land source files for all trackers in one place
+            and run the extraction into each DB.
     """
 
     def __init__(self, master: tk.Misc | None = None, **kwargs: Any) -> None:
         super().__init__(master, **kwargs)
 
+        # Step 1
         self.path_var = tk.StringVar()
-        self.var_sap = tk.StringVar()  # used to display / prefill destination folder
-        self._is_running = False
+
+        # Step 2 – folder + per-tracker SAP files + shared EPW / Land
+        self.var_sap = tk.StringVar()  # destination folder for SAP exports
+
+        self.var_sap_maint = tk.StringVar()
+        self.var_sap_poles = tk.StringVar()
+        self.var_sap_poles_rfc = tk.StringVar()
+        self.var_sap_wmp = tk.StringVar()
+
+        self.var_epw = tk.StringVar()
+        self.var_land = tk.StringVar()
+
+        # Attach change listeners so we can enable/disable "Extract Data"
+        for v in (
+            self.var_sap,
+            self.var_sap_maint,
+            self.var_sap_poles,
+            self.var_sap_poles_rfc,
+            self.var_sap_wmp,
+            self.var_epw,
+            self.var_land,
+        ):
+            v.trace_add("write", lambda *_: self._update_step2_state())
+
+        self.btn_extract: ttk.Button | None = None
 
         self._build_ui()
         self._wire_signals()
@@ -83,10 +116,12 @@ class MASTER_TRACKER_BUILDER(ToolView):
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
 
-        # ---- Row 3: Step 1 title (mirrors the other tracker_builder UIs) ----
+        # ---- Row 3: Step 1 title ----
         ttk.Label(
             self,
-            text="Step 1: Upload latest copy of MPP and update all tracker databases",
+            text=(
+                "Step 1: Upload latest copy of MPP and update all tracker databases"
+            ),
         ).grid(row=3, column=0, columnspan=6, sticky="w", pady=(8, 4), padx=16)
 
         # ---- Row 4: "MPP Database:" [Entry] [Browse] [Update MPP Database] ----
@@ -104,7 +139,6 @@ class MASTER_TRACKER_BUILDER(ToolView):
         self.browse_btn = ttk.Button(fr4, text="Browse", command=self._browse_file)
         self.browse_btn.grid(row=0, column=2, sticky="w", padx=(0, 8))
 
-        # Button text changed from "Generate Order List" -> "Update MPP Database"
         self.generate_btn = ttk.Button(
             fr4,
             text="Update MPP Database",
@@ -113,11 +147,14 @@ class MASTER_TRACKER_BUILDER(ToolView):
         )
         self.generate_btn.grid(row=0, column=3, sticky="w")
 
+        # ---- Row 5: Step 2 title ----
+        ttk.Label(
+            self,
+            text="Step 2: Update SAP, EPW, and Land data for all trackers",
+        ).grid(row=5, column=0, columnspan=6, sticky="w", padx=16, pady=(16, 2))
+
         # ---- Row 6: SAP Data (all trackers) ----
-        # Mirrors the WMP tracker row-6 layout, but here:
-        #   - Entry shows the destination folder (if known)
-        #   - Browse lets user pick a default folder
-        #   - "Extract SAP Data" runs SAP automation for all 4 DBs
+        # Here the entry shows the *destination folder* for the SAP exports.
         fr6 = ttk.Frame(self)
         fr6.grid(row=6, column=0, columnspan=6, sticky="ew", padx=16, pady=4)
         fr6.columnconfigure(1, weight=1)
@@ -139,6 +176,66 @@ class MASTER_TRACKER_BUILDER(ToolView):
             command=self._on_extract_sap_data,
         ).grid(row=0, column=3, sticky="w")
 
+        # ---- Rows 7–10: Per-tracker SAP file paths ----
+        def _make_sap_row(row: int, label: str, var: tk.StringVar) -> None:
+            fr = ttk.Frame(self)
+            fr.grid(row=row, column=0, columnspan=6, sticky="ew", padx=16, pady=2)
+            fr.columnconfigure(1, weight=1)
+            ttk.Label(fr, text=label).grid(
+                row=0, column=0, sticky="w", padx=(0, 8)
+            )
+            ttk.Entry(fr, textvariable=var).grid(
+                row=0, column=1, sticky="ew", padx=(0, 8)
+            )
+            ttk.Button(
+                fr,
+                text="Browse…",
+                command=lambda v=var: self._browse_excel(v),
+            ).grid(row=0, column=2, sticky="w")
+
+        _make_sap_row(7, "Maintenance SAP Data:", self.var_sap_maint)
+        _make_sap_row(8, "Poles SAP Data:", self.var_sap_poles)
+        _make_sap_row(9, "Poles RFC SAP Data:", self.var_sap_poles_rfc)
+        _make_sap_row(10, "WMP SAP Data:", self.var_sap_wmp)
+
+        # ---- Rows 11–12: Shared EPW / Land inputs ----
+        def _make_row(row: int, label: str, var: tk.StringVar) -> None:
+            fr = ttk.Frame(self)
+            fr.grid(row=row, column=0, columnspan=6, sticky="ew", padx=16, pady=4)
+            fr.columnconfigure(1, weight=1)
+            ttk.Label(fr, text=label).grid(
+                row=0, column=0, sticky="w", padx=(0, 8)
+            )
+            ttk.Entry(fr, textvariable=var).grid(
+                row=0, column=1, sticky="ew", padx=(0, 8)
+            )
+            ttk.Button(
+                fr,
+                text="Browse…",
+                command=lambda v=var: self._browse_excel(v),
+            ).grid(row=0, column=2, sticky="w")
+
+        _make_row(11, "EPW Data", self.var_epw)
+        _make_row(12, "Land Data", self.var_land)
+
+        # ---- Row 13: Extract Data button ----
+        fr_btn = ttk.Frame(self)
+        fr_btn.grid(
+            row=13,
+            column=0,
+            columnspan=6,
+            sticky="w",
+            padx=16,
+            pady=(4, 6),
+        )
+        self.btn_extract = ttk.Button(
+            fr_btn,
+            text="Extract Data",
+            command=self._on_extract_step2,
+            state="disabled",
+        )
+        self.btn_extract.grid(row=0, column=0)
+
         # Let middle columns expand
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
@@ -148,7 +245,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         self.path_var.trace_add("write", lambda *_: self._update_generate_state())
 
     # ------------------------------------------------------------------
-    # Helpers
+    # Step 1 helpers (MPP update for all DBs)
     # ------------------------------------------------------------------
     def _browse_file(self) -> None:
         fp = filedialog.askopenfilename(
@@ -158,22 +255,12 @@ class MASTER_TRACKER_BUILDER(ToolView):
         if fp:
             self.path_var.set(fp)
 
-    def _browse_sap_folder(self) -> None:
-        folder = filedialog.askdirectory(title="Select SAP Export Folder")
-        if folder:
-            self.var_sap.set(folder)
-
     def _update_generate_state(self) -> None:
-        if self._is_running:
-            # Don't re-enable while a run is in progress
-            return
+        # Don't re-enable while a run is in progress
         path = self.path_var.get().strip()
         ok = bool(path) and os.path.isfile(path)
         self.generate_btn.configure(state=("normal" if ok else "disabled"))
 
-    # ------------------------------------------------------------------
-    # Core action: update all MPP DBs (Step 1)
-    # ------------------------------------------------------------------
     def _on_generate(self) -> None:
         path = self.path_var.get().strip()
         if not path:
@@ -184,14 +271,10 @@ class MASTER_TRACKER_BUILDER(ToolView):
             return
 
         if not os.path.isfile(path):
-            messagebox.showerror(
-                "Invalid file",
-                f"File not found:\n{path}",
-            )
+            messagebox.showerror("Invalid file", f"File not found:\n{path}")
             return
 
         # Mark UI as busy
-        self._is_running = True
         self.generate_btn.configure(state="disabled")
         self.browse_btn.configure(state="disabled")
         self.configure(cursor="watch")
@@ -253,7 +336,6 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
             # Final UI cleanup and messaging on the main thread
             def done() -> None:
-                self._is_running = False
                 self.generate_btn.configure(state="normal")
                 self.browse_btn.configure(state="normal")
                 self.configure(cursor="")
@@ -293,48 +375,199 @@ class MASTER_TRACKER_BUILDER(ToolView):
         threading.Thread(target=worker, daemon=True).start()
 
     # ------------------------------------------------------------------
-    # Step 2: Extract SAP Data for all trackers
+    # Step 2 helpers
     # ------------------------------------------------------------------
+    def _browse_sap_folder(self) -> None:
+        folder = filedialog.askdirectory(
+            title="Select destination folder for SAP Data"
+        )
+        if folder:
+            self.var_sap.set(folder)
+
+    def _browse_excel(self, var: tk.StringVar) -> None:
+        path = filedialog.askopenfilename(
+            title="Select Excel file",
+            filetypes=[
+                ("Excel files", "*.xlsx *.xlsm *.xlsb *.xls"),
+                ("All files", "*.*"),
+            ],
+        )
+        if path:
+            var.set(path)
+
     def _on_extract_sap_data(self) -> None:
         """
-        Button handler for 'Extract SAP Data' (Master).
+        Button handler for 'Extract SAP Data (all trackers)'.
 
-        - Shows SAPDetailsDialog (username, password, destination folder).
-        - Opens SAP once, logs in once.
-        - Loops over Maintenance, Poles, Poles RFC, WMP:
-            * pulls each DB's order_tracking_list
-            * runs ZIWRE_TM_REPORT
-            * exports XXL to a default file name based on today's date
-            * sends VKey(15) between runs.
+        Calls run_multi_tm_export(), which:
+          - prompts for SAP username/password and destination folder (prefilled
+            from var_sap if present)
+          - logs into SAP once
+          - runs the Task Management report for each DB
+          - exports four Excel files (one per tracker)
+        Then we auto-populate the four per-tracker SAP path entries.
         """
-        dest_hint = self.var_sap.get().strip() or None
-
         try:
-            result = run_multi_tm_export(self, initial_dest=dest_hint)
+            initial_dest = self.var_sap.get().strip() or None
+            result = run_multi_tm_export(self, initial_dest=initial_dest)
         except Exception as e:
             messagebox.showerror(
-                "Extract SAP Data Failed",
-                f"{type(e).__name__}: {e}",
+                "Extract SAP Data Failed", f"{type(e).__name__}: {e}"
             )
             return
 
         if not result:
-            # User likely cancelled the SAP details dialog
+            # User cancelled in the dialog
             return
 
-        destination = result.get("destination", "")
-        files = result.get("files", [])
+        dest_folder = result.get("destination") or ""
+        if dest_folder:
+            self.var_sap.set(dest_folder)
 
-        if destination:
-            self.var_sap.set(destination)
+        # File names follow the convention in task_management_master.py
+        today_str = datetime.today().strftime("%m%d%Y")
+        if dest_folder:
+            def _join(name: str) -> str:
+                return os.path.join(dest_folder, name)
 
-        if files:
-            msg_lines = ["Exported the following files:", ""]
-            for f in files:
-                msg_lines.append(f"• {os.path.join(destination, f)}")
-            messagebox.showinfo("SAP Export Complete", "\n".join(msg_lines))
-        else:
-            messagebox.showinfo(
-                "SAP Export Complete",
-                "No files were exported (no orders found in the trackers).",
+            self.var_sap_maint.set(
+                _join(f"Maintenance SAP Data - {today_str}.xlsx")
             )
+            self.var_sap_poles.set(
+                _join(f"Poles SAP Data - {today_str}.xlsx")
+            )
+            self.var_sap_poles_rfc.set(
+                _join(f"Poles RFC SAP Data - {today_str}.xlsx")
+            )
+            self.var_sap_wmp.set(
+                _join(f"WMP SAP Data - {today_str}.xlsx")
+            )
+
+        # Re-evaluate whether "Extract Data" can be enabled
+        self._update_step2_state()
+
+    def _update_step2_state(self, *_args) -> None:
+        """
+        Enable 'Extract Data' only when we have valid files for:
+          - 4x SAP (Maintenance, Poles, Poles RFC, WMP)
+          - 1x EPW
+          - 1x Land
+        EPW / Land are shared across all trackers.
+        """
+        if self.btn_extract is None:
+            return  # UI not fully built yet
+
+        required_paths = [
+            self.var_sap_maint.get().strip(),
+            self.var_sap_poles.get().strip(),
+            self.var_sap_poles_rfc.get().strip(),
+            self.var_sap_wmp.get().strip(),
+            self.var_epw.get().strip(),
+            self.var_land.get().strip(),
+        ]
+        all_ok = (
+            bool(required_paths)
+            and all(p and os.path.isfile(p) for p in required_paths)
+        )
+        self.btn_extract.configure(state=("normal" if all_ok else "disabled"))
+
+    def _on_extract_step2(self) -> None:
+        """
+        Run the EPW / Land / SAP extraction for *all four* trackers in one go.
+
+        - EPW + Land paths are *shared* across all trackers.
+        - SAP path is taken from the respective per-tracker row.
+        """
+        paths = {
+            "Maintenance SAP": self.var_sap_maint.get().strip(),
+            "Poles SAP": self.var_sap_poles.get().strip(),
+            "Poles RFC SAP": self.var_sap_poles_rfc.get().strip(),
+            "WMP SAP": self.var_sap_wmp.get().strip(),
+            "EPW": self.var_epw.get().strip(),
+            "LAND": self.var_land.get().strip(),
+        }
+
+        missing = [k for k, p in paths.items() if not p or not os.path.isfile(p)]
+        if missing:
+            messagebox.showerror(
+                "Missing Files",
+                "Please provide valid files for: " + ", ".join(missing),
+            )
+            return
+
+        busy = BusyPopup(self, title="Extracting Data for All Trackers")
+        self.btn_extract.configure(state="disabled")
+        self.configure(cursor="watch")
+        self.update_idletasks()
+
+        def worker() -> None:
+            try:
+                msgs: List[str] = []
+
+                trackers = [
+                    (
+                        "Maintenance",
+                        maintenance_db,
+                        paths["Maintenance SAP"],
+                        ALLOWED_MAT_MAINT,
+                    ),
+                    (
+                        "Poles",
+                        poles_db,
+                        paths["Poles SAP"],
+                        ALLOWED_MAT_POLES,
+                    ),
+                    (
+                        "Poles RFC",
+                        poles_rfc_db,
+                        paths["Poles RFC SAP"],
+                        ALLOWED_MAT_POLES_RFC,
+                    ),
+                    (
+                        "WMP",
+                        wmp_db,
+                        paths["WMP SAP"],
+                        ALLOWED_MAT_WMP,
+                    ),
+                ]
+
+                epw_path = paths["EPW"]
+                land_path = paths["LAND"]
+
+                for label, db_mod, sap_path, allowed_mat in trackers:
+                    db_path = db_mod.default_db_path()
+                    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+                    t1, n1 = pull_sap_data(db_path, sap_path)
+                    msgs.append(f"{label}: {t1} (SAP) = {n1:,} rows")
+
+                    t2, n2 = pull_epw_data(db_path, epw_path, allowed_mat)
+                    msgs.append(f"{label}: {t2} (EPW) = {n2:,} rows")
+
+                    t3, n3 = pull_land_data(db_path, land_path, allowed_mat)
+                    msgs.append(f"{label}: {t3} (Land) = {n3:,} rows")
+
+                def done_ok() -> None:
+                    busy.finish()
+                    self.btn_extract.configure(state="normal")
+                    self.configure(cursor="")
+                    messagebox.showinfo(
+                        "Extraction Complete",
+                        "Database extraction complete for all trackers.\n\n"
+                        + "\n".join(msgs),
+                    )
+
+                self.after(0, done_ok)
+
+            except Exception as e:
+                err_text = f"{type(e).__name__}: {e}"
+
+                def done_err() -> None:
+                    busy.finish()
+                    self.btn_extract.configure(state="normal")
+                    self.configure(cursor="")
+                    messagebox.showerror("Extraction Failed", err_text)
+
+                self.after(0, done_err)
+
+        threading.Thread(target=worker, daemon=True).start()
