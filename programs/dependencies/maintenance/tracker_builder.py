@@ -9,7 +9,7 @@ import csv
 import io
 import pandas as pd
 
-from ledgers.tracker_conditions_ledger.maintenance import ALLOWED_MAT
+from ledgers.tracker_conditions_ledger.maintenance import ALLOWED_MAT, ALLOWED_SAP_STATUS
 
 from helpers.tracker_builder.pull_sap_data import pull_sap_data
 from helpers.tracker_builder.pull_epw_data import pull_epw_data
@@ -436,7 +436,7 @@ class Maintenance_Tracker_Builder(ToolView):
             try:
                 msgs = []
                 tbl, n = pull_sap_data(db_path, paths["SAP"]);   msgs.append(f"- {tbl}: {n:,} rows")
-                tbl, n = pull_epw_data(db_path, paths["EPW"], ALLOWED_MAT, True);   msgs.append(f"- {tbl}: {n:,} rows")
+                tbl, n = pull_epw_data(db_path, paths["EPW"], ALLOWED_MAT, True, True, ALLOWED_SAP_STATUS);   msgs.append(f"- {tbl}: {n:,} rows")
                 tbl, n = pull_land_data(db_path, paths["LAND"], ALLOWED_MAT); msgs.append(f"- {tbl}: {n:,} rows")
 
                 # Ensure indexes after loading source tables
