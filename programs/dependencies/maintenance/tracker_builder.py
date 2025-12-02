@@ -437,7 +437,7 @@ class Maintenance_Tracker_Builder(ToolView):
                 msgs = []
                 tbl, n = pull_sap_data(db_path, paths["SAP"]);   msgs.append(f"- {tbl}: {n:,} rows")
                 tbl, n = pull_epw_data(db_path, paths["EPW"], ALLOWED_MAT, True, True, ALLOWED_SAP_STATUS);   msgs.append(f"- {tbl}: {n:,} rows")
-                tbl, n = pull_land_data(db_path, paths["LAND"], ALLOWED_MAT); msgs.append(f"- {tbl}: {n:,} rows")
+                tbl, n = pull_land_data(db_path, paths["LAND"], ALLOWED_MAT, True, True, ALLOWED_SAP_STATUS); msgs.append(f"- {tbl}: {n:,} rows")
 
                 # Ensure indexes after loading source tables
                 self._ensure_perf_indexes(db_path)

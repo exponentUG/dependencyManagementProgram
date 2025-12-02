@@ -606,7 +606,15 @@ class MASTER_TRACKER_BUILDER(ToolView):
                     msgs.append(f"{label}: {t2} (EPW) = {n2:,} rows")
 
                     # Land (unchanged)
-                    t3, n3 = pull_land_data(db_path, land_path, allowed_mat)
+                    # Land – now using extended signature (same flags as EPW)
+                    t3, n3 = pull_land_data(
+                        db_path,
+                        land_path,
+                        allowed_mat,
+                        REMOVE_BTAG=remove_btag,
+                        REMOVE_SAP_STATUS=remove_sap_status,
+                        SAP_STATUS_TO_KEEP=sap_status_to_keep,
+                    )
                     msgs.append(f"{label}: {t3} (Land) = {n3:,} rows")
 
                 def done_ok() -> None:

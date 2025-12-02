@@ -22,7 +22,7 @@ def _ci(df: pd.DataFrame, name: str) -> str | None:
             return c
     return None
 
-def pull_land_data(db_path: str, xlsx_path: str, ALLOWED_MAT: Set[str]) -> Tuple[str, int]:
+def pull_land_data(db_path: str, xlsx_path: str, ALLOWED_MAT: Set[str], REMOVE_BTAG: bool = False, REMOVE_SAP_STATUS: bool = False, SAP_STATUS_TO_KEEP: Set[str] = None) -> Tuple[str, int]:
     """
     Read Excel 'Export' → normalize to 'land_data', filter MAT Code to ALLOWED_MAT.
     """
@@ -103,6 +103,12 @@ def pull_land_data(db_path: str, xlsx_path: str, ALLOWED_MAT: Set[str]) -> Tuple
     # filter
     out = out[out["MAT Code"].str.upper().isin(ALLOWED_MAT)]
     out = out.dropna(subset=["Order"])
+
+    if REMOVE_BTAG:
+        out = out[out["Priority"] != "B"]
+
+    if REMOVE_SAP_STATUS:
+        out = out[out["User Status"].str.upper().isin(SAP_STATUS_TO_KEEP)]
 
     with sqlite3.connect(db_path) as conn:
         out.to_sql("land_data", conn, if_exists="replace", index=False)
