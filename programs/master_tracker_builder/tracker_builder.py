@@ -21,6 +21,32 @@ from helpers.tracker_builder.pull_epw_data import pull_epw_data
 from helpers.tracker_builder.pull_land_data import pull_land_data
 from helpers.tracker_builder.update_trackers import build_sap_tracker_initial
 
+# table builders (shared across programs)
+from helpers.tracker_builder.table_builders.environment_table import get_environment_table
+from helpers.tracker_builder.table_builders.misctsk_table import get_misc_tsk_table
+from helpers.tracker_builder.table_builders.joint_pole_table import get_joint_pole_table
+from helpers.tracker_builder.table_builders.permit_table import get_permit_table
+from helpers.tracker_builder.table_builders.land_table import get_land_table
+from helpers.tracker_builder.table_builders.faa_table import get_faa_table
+from helpers.tracker_builder.table_builders.master_table import get_master_table
+
+TRACKER_MODES = [
+    "Master",
+    "Permit",
+    "Land",
+    "FAA",
+    "Environment",
+    "Joint Pole",
+    "MiscTSK",
+]
+
+DB_CHOICES = [
+    "WMP",
+    "Maintenance",
+    "Poles",
+    "Poles RFC",
+]
+
 from ledgers.tracker_conditions_ledger.maintenance import (
     ALLOWED_MAT as ALLOWED_MAT_MAINT,
     ALLOWED_SAP_STATUS as ALLOWED_SAP_STATUS_MAINT,
@@ -116,6 +142,14 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
         self.btn_extract: ttk.Button | None = None
         self.btn_update_trackers: ttk.Button | None = None
+
+        # Tracker Tools: database + tracker selection + table view
+        self.db_var = tk.StringVar(value="WMP")          # Database dropdown
+        self.tracker_var = tk.StringVar(value="Master")  # Tracker dropdown
+        self.count_var = tk.StringVar(value="Row Count: —")
+
+        self.tree: ttk.Treeview | None = None  # will be created in _build_ui
+
 
         self._build_ui()
         self._wire_signals()
@@ -258,24 +292,219 @@ class MASTER_TRACKER_BUILDER(ToolView):
             row=15, column=0, columnspan=6, sticky="w", padx=16, pady=(12, 4)
         )
 
-        # ---- Row 16: Tools row (left-aligned Update Trackers) ----
+        # ---- Row 16: Tools row
+        # left: Update Trackers
+        # right: Database + Tracker dropdowns
         fr_tools = ttk.Frame(self)
         fr_tools.grid(
-            row=16, column=0, columnspan=6, sticky="w", padx=16, pady=(0, 8)
+            row=16, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 8)
         )
+        fr_tools.columnconfigure(0, weight=0)  # left buttons
+        fr_tools.columnconfigure(1, weight=1)  # spacer
+        fr_tools.columnconfigure(2, weight=0)  # right controls
 
+        # Left group: Update Trackers button
+        left_fr = ttk.Frame(fr_tools)
+        left_fr.grid(row=0, column=0, sticky="w")
         self.btn_update_trackers = ttk.Button(
-            fr_tools,
+            left_fr,
             text="Update Trackers",
             command=self._on_update_trackers,
         )
         self.btn_update_trackers.grid(row=0, column=0, padx=(0, 8))
 
-        # Let middle columns expand
+        # Right group: Database + Tracker dropdowns
+        right_fr = ttk.Frame(fr_tools)
+        right_fr.grid(row=0, column=2, sticky="e")
+
+        ttk.Label(right_fr, text="Database:").grid(
+            row=0, column=0, sticky="e", padx=(0, 4)
+        )
+        self.db_dd = ttk.Combobox(
+            right_fr,
+            textvariable=self.db_var,
+            state="readonly",
+            values=DB_CHOICES,
+            width=14,
+        )
+        self.db_dd.grid(row=0, column=1, sticky="e", padx=(0, 12))
+        self.db_dd.bind("<<ComboboxSelected>>", lambda _e: self._refresh_table())
+
+        ttk.Label(right_fr, text="Tracker:").grid(
+            row=0, column=2, sticky="e", padx=(0, 4)
+        )
+        self.tracker_dd = ttk.Combobox(
+            right_fr,
+            textvariable=self.tracker_var,
+            state="readonly",
+            values=TRACKER_MODES,
+            width=16,
+        )
+        self.tracker_dd.grid(row=0, column=3, sticky="e")
+        self.tracker_dd.bind("<<ComboboxSelected>>", lambda _e: self._refresh_table())
+
+        # ---- Row 17: Row Count (between tools and table)
+        fr_count = ttk.Frame(self)
+        fr_count.grid(
+            row=17, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6)
+        )
+        ttk.Label(fr_count, textvariable=self.count_var).grid(
+            row=0, column=0, sticky="w"
+        )
+
+        # ---- Row 18: Table (Treeview) with scrollbars
+        lf = ttk.LabelFrame(self, text="Tracker View")
+        lf.grid(
+            row=18, column=0, columnspan=6,
+            sticky="nsew", padx=16, pady=(0, 12)
+        )
+
+        self.tree = ttk.Treeview(lf, columns=("message",), show="headings", height=16)
+        self.tree.heading("message", text="Message")
+        self.tree.column("message", width=960, anchor="w")
+
+        vsb = ttk.Scrollbar(lf, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(lf, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        lf.rowconfigure(0, weight=1)
+        lf.columnconfigure(0, weight=1)
+
+        # Let the table area grow
+        self.rowconfigure(18, weight=1)
+        self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
         self.columnconfigure(3, weight=1)
 
+        # Initial load for the table
+        self._refresh_table()
+
+    # ------------------------------------------------------------------
+    # Table helpers (shared tracker view across all DBs)
+    # ------------------------------------------------------------------
+    def _get_db_path_for_selection(self) -> str | None:
+        """Map dropdown database name -> concrete DB path."""
+        name = (self.db_var.get() or "").strip()
+        if name == "WMP":
+            return wmp_db.default_db_path()
+        if name == "Maintenance":
+            return maintenance_db.default_db_path()
+        if name == "Poles":
+            return poles_db.default_db_path()
+        if name == "Poles RFC":
+            return poles_rfc_db.default_db_path()
+        return None
+
+    def _set_table_columns(self, columns: list[str]) -> None:
+        if not self.tree:
+            return
+
+        # Clear headings
+        for col in self.tree["columns"]:
+            try:
+                self.tree.heading(col, text="")
+            except Exception:
+                pass
+
+        self.tree["columns"] = columns
+        for col in columns:
+            self.tree.heading(col, text=col)
+            base = 140 if col in ("Order", "Div", "Region", "DS11", "PC21") else 160
+            if col in ("Environment Notes", "Environment Update", "Action"):
+                base = 320
+            if col in (
+                "WPD",
+                "CLICK Start Date",
+                "CLICK End Date",
+                "Environment Anticipated Out Date",
+            ):
+                base = 180
+            self.tree.column(col, width=base, minwidth=80, anchor="w")
+
+    def _clear_table_rows(self) -> None:
+        if not self.tree:
+            return
+        for iid in self.tree.get_children(""):
+            self.tree.delete(iid)
+
+    def _populate_table(self, columns: list[str], rows: list[tuple]) -> None:
+        if not self.tree:
+            return
+
+        self._set_table_columns(columns)
+        self._clear_table_rows()
+
+        if not rows:
+            if columns and columns[0] != "Message":
+                self._set_table_columns(["Message"])
+            self.tree.insert("", "end", values=("No data to display.",))
+            return
+
+        for r in rows:
+            r2 = tuple(list(r)[: len(columns)] + [""] * max(0, len(columns) - len(r)))
+            self.tree.insert("", "end", values=r2)
+
+    def _refresh_table(self) -> None:
+        """Refresh table based on selected Database + Tracker."""
+        if not self.tree:
+            return
+
+        mode = (self.tracker_var.get() or "").strip()
+        db_path = self._get_db_path_for_selection()
+
+        if not db_path or not os.path.isfile(db_path):
+            self._populate_table(
+                ["Message"],
+                [(
+                    "Database not found for this program. "
+                    "Run 'Extract Data' and 'Update Trackers' first.",
+                )],
+            )
+            self.count_var.set("Row Count: —")
+            return
+
+        # Choose appropriate table builder
+        try:
+            if mode == "Environment":
+                columns, rows = get_environment_table(db_path)
+            elif mode == "MiscTSK":
+                columns, rows = get_misc_tsk_table(db_path)
+            elif mode == "Joint Pole":
+                columns, rows = get_joint_pole_table(db_path)
+            elif mode == "Permit":
+                columns, rows = get_permit_table(db_path)
+            elif mode == "Land":
+                columns, rows = get_land_table(db_path)
+            elif mode == "FAA":
+                columns, rows = get_faa_table(db_path)
+            elif mode == "Master":
+                columns, rows = get_master_table(db_path)
+            else:
+                self._populate_table(["Message"], [("In development...",)])
+                self.count_var.set("Row Count: —")
+                return
+        except Exception as e:
+            self._populate_table(
+                ["Message"],
+                [(f"Error loading {mode} view: {type(e).__name__}: {e}",)],
+            )
+            self.count_var.set("Row Count: —")
+            return
+
+        if not columns:
+            self._populate_table(
+                ["Message"],
+                [("No data yet. Run 'Extract Data' and 'Update Trackers' first.",)],
+            )
+            self.count_var.set("Row Count: 0")
+        else:
+            self._populate_table(columns, rows)
+            self.count_var.set(f"Row Count: {len(rows):,}")
+    
     def _wire_signals(self) -> None:
         self.path_var.trace_add("write", lambda *_: self._update_generate_state())
 
