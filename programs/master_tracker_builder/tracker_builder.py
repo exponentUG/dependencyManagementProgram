@@ -5,9 +5,12 @@ import threading
 import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
+import pandas as pd
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from helpers.wmp_tracker_builder.logic import today_strings
+
 
 from core.base import ToolView, FONT_H1, FONT_H2  # FONT_H1 may be unused but is fine
 
@@ -303,15 +306,23 @@ class MASTER_TRACKER_BUILDER(ToolView):
         fr_tools.columnconfigure(1, weight=1)  # spacer
         fr_tools.columnconfigure(2, weight=0)  # right controls
 
-        # Left group: Update Trackers button
+        # Left group: Update Trackers + Export to Excel
         left_fr = ttk.Frame(fr_tools)
         left_fr.grid(row=0, column=0, sticky="w")
+
         self.btn_update_trackers = ttk.Button(
             left_fr,
             text="Update Trackers",
             command=self._on_update_trackers,
         )
         self.btn_update_trackers.grid(row=0, column=0, padx=(0, 8))
+
+        self.btn_export_excel = ttk.Button(
+            left_fr,
+            text="Export to Excel",
+            command=self._on_export_excel,
+        )
+        self.btn_export_excel.grid(row=0, column=1, padx=(0, 8))
 
         # Right group: Database + Tracker dropdowns
         right_fr = ttk.Frame(fr_tools)
@@ -386,6 +397,129 @@ class MASTER_TRACKER_BUILDER(ToolView):
     # ------------------------------------------------------------------
     # Table helpers (shared tracker view across all DBs)
     # ------------------------------------------------------------------
+    def _on_export_excel(self) -> None:
+        """
+        Export all tracker views (7 sheets) for ALL four programs
+        (WMP, Maintenance, Poles, Poles RFC) to separate Excel files
+        in a single selected folder, with a busy popup.
+        """
+        # Ask for destination folder on the main thread
+        folder = filedialog.askdirectory(
+            title="Select destination folder for tracker Excel exports"
+        )
+        if not folder:
+            return  # user cancelled
+
+        # Show busy popup while we export in the background
+        busy = BusyPopup(self, title="Exporting trackers to Excel")
+        if getattr(self, "btn_export_excel", None) is not None:
+            self.btn_export_excel.configure(state="disabled")
+        self.configure(cursor="watch")
+        self.update_idletasks()
+
+        def worker() -> None:
+            # Common sheet mapping: sheet name -> table builder
+            sheets = [
+                ("Master",      get_master_table),
+                ("Permit",      get_permit_table),
+                ("Land",        get_land_table),
+                ("FAA",         get_faa_table),
+                ("Environment", get_environment_table),
+                ("Joint Pole",  get_joint_pole_table),
+                ("MiscTSK",     get_misc_tsk_table),
+            ]
+
+            # Date suffix for filenames
+            _mdy_slash, mdy_dash = today_strings()
+
+            # (Label for messages, file prefix, db module)
+            trackers = [
+                ("WMP",         "WMP Tracker",         wmp_db),
+                ("Maintenance", "Maintenance Tracker", maintenance_db),
+                ("Poles",       "Poles Tracker",       poles_db),
+                ("Poles RFC",   "Poles RFC Tracker",   poles_rfc_db),
+            ]
+
+            successes: list[str] = []
+            errors: list[str] = []
+
+            for label, prefix, db_mod in trackers:
+                db_path = db_mod.default_db_path()
+                if not os.path.isfile(db_path):
+                    errors.append(
+                        f"- {label}: Database not found:\n  {db_path}\n  Run Extract/Generate first."
+                    )
+                    continue
+
+                save_path = os.path.join(folder, f"{prefix} - {mdy_dash}.xlsx")
+
+                try:
+                    with pd.ExcelWriter(save_path, engine="xlsxwriter") as writer:
+                        for sheet_name, getter in sheets:
+                            try:
+                                cols, rows = getter(db_path)
+                            except Exception as e:
+                                # If a table builder fails, put the error in that sheet
+                                cols, rows = ["Message"], [
+                                    (f"Error loading {sheet_name}: {type(e).__name__}: {e}",)
+                                ]
+
+                            if not cols:
+                                # Match UI behavior: when no data, include a friendly message
+                                df = pd.DataFrame(
+                                    [
+                                        {
+                                            "Message": (
+                                                "No data yet. Run 'Extract Data' and "
+                                                "'Update Trackers' first."
+                                            )
+                                        }
+                                    ]
+                                )
+                            else:
+                                df = pd.DataFrame(rows, columns=cols)
+
+                            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+                    successes.append(f"- {label}: {save_path}")
+                except Exception as e:
+                    errors.append(f"- {label}: {type(e).__name__}: {e}")
+
+            def done() -> None:
+                # Close busy popup and restore UI state
+                busy.finish()
+                if getattr(self, "btn_export_excel", None) is not None:
+                    self.btn_export_excel.configure(state="normal")
+                self.configure(cursor="")
+
+                # Summarize result
+                if not successes and errors:
+                    messagebox.showerror(
+                        "Export Failed",
+                        "No trackers were exported.\n\n" + "\n".join(errors),
+                    )
+                elif successes and errors:
+                    msg_lines: list[str] = []
+                    msg_lines.append("Some trackers were exported, but others failed.")
+                    msg_lines.append("")
+                    msg_lines.append("Exported:")
+                    msg_lines.extend(successes)
+                    msg_lines.append("")
+                    msg_lines.append("Issues:")
+                    msg_lines.extend(errors)
+                    messagebox.showwarning(
+                        "Export Complete (partial)", "\n".join(msg_lines)
+                    )
+                else:
+                    msg_lines = ["Exported all trackers successfully:", ""]
+                    msg_lines.extend(successes)
+                    messagebox.showinfo("Export Complete", "\n".join(msg_lines))
+
+            # Back to main thread for UI updates
+            self.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _get_db_path_for_selection(self) -> str | None:
         """Map dropdown database name -> concrete DB path."""
         name = (self.db_var.get() or "").strip()

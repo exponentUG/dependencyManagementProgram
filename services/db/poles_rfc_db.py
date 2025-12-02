@@ -231,6 +231,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         "Primary Status",
         "Job Owner",
         "Project Managed Flag",
+        "Mega Bundle Flag",  # NEW: only used for filtering
     ]
 
     # --- Single-pass read (no header-only pre-pass) ---
@@ -257,17 +258,18 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
 
     # ---------- FAST FILTERING ON RAW STRINGS ----------
     # Precompute uppercase once (on object dtype; cheaper than string[EA])
-    mat_u   = df["MAT"].str.upper()
-    pm_u    = df["Project Managed Flag"].str.upper()
-    notif_u = df["Notif Status"].str.upper()
-    sap_status = df["Primary Status"].str.upper()
-    priority = df["Priority"].str.upper()
+    mat_u        = df["MAT"].str.upper()
+    pm_u         = df["Project Managed Flag"].str.upper()
+    notif_u      = df["Notif Status"].str.upper()
+    sap_status   = df["Primary Status"].str.upper()
+    priority     = df["Priority"].str.upper()
+    mega_flag_u  = df["Mega Bundle Flag"].str.upper()  # NEW
 
-    allowed_mat   = {m.upper() for m in ALLOWED_MAT}
+    allowed_mat        = {m.upper() for m in ALLOWED_MAT}
     # treat PRY as string for filtering to avoid full numeric conversion
-    allowed_years = {str(y) for y in ALLOWED_YEARS}
+    allowed_years      = {str(y) for y in ALLOWED_YEARS}
     allowed_sap_status = {y.upper() for y in ALLOWED_SAP_STATUS}
-    pry           = df["Project Reporting Year"].astype(str)
+    pry                = df["Project Reporting Year"].astype(str)
 
     mask = (
         mat_u.isin(allowed_mat)
@@ -276,9 +278,13 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         & (notif_u != NOTIF_STATUS_TO_REMOVE)
         & sap_status.isin(allowed_sap_status)
         & (priority != NOT_ALLOWED_PRIORITY.upper())
+        & (mega_flag_u != "Y")  # NEW: drop Mega Bundle rows
     )
 
     df = df.loc[mask].reset_index(drop=True)
+
+    # Drop Mega Bundle Flag before coercion; it isn't part of MPP_SCHEMA
+    df = df.drop(columns=["Mega Bundle Flag"], errors="ignore")
 
     # ---------- Only now apply expensive dtype coercion ----------
     df = _apply_target_dtypes(df)

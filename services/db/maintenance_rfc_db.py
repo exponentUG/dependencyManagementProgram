@@ -1,4 +1,4 @@
-# services/db/poles_db.py
+# services/db/maintenance_rfc_db.py
 from __future__ import annotations
 import os
 import sqlite3
@@ -7,20 +7,20 @@ from typing import Iterable, List, Tuple, Optional, Dict
 from datetime import datetime
 import pandas as pd
 from pathlib import Path
-from ledgers.tracker_conditions_ledger.poles import (
+from ledgers.tracker_conditions_ledger.maintenance import (
     ALLOWED_MAT,
     ALLOWED_YEARS,
     REQUIRED_PM_FLAG,
     NOTIF_STATUS_TO_REMOVE,
     ALLOWED_SAP_STATUS,
-    NOT_ALLOWED_PRIORITY,
+    NOT_ALLOWED_PRIORITY
 )
 
 # ------------------------
 # Paths & DB location
 # ------------------------
 DATA_DIR = "data"
-DB_NAME = "poles_tracker.sqlite3"
+DB_NAME = "maintenance_rfc_tracker.sqlite3"
 DB_PATH = os.path.join(DATA_DIR, DB_NAME)  # kept for backward compatibility
 
 
@@ -57,16 +57,16 @@ def get_connection(path: Optional[str] = None) -> sqlite3.Connection:
 # Columns & target dtypes (storage dtypes tuned for SQLite)
 # Note: SQLite has dynamic typing; we coerce in Python and store as TEXT/INTEGER
 MPP_SCHEMA: Dict[str, str] = {
-    "Region": "TEXT",  # not needed
+    "Region": "TEXT",                       # not needed
     "Div": "TEXT",
     "Notification": "INTEGER",
     "Order": "INTEGER",
-    "Planning Order": "INTEGER",  # not needed
-    "Resource": "TEXT",  # not needed
-    "Work Plan Date": "TEXT",  # stored as "MM/DD/YYYY"
-    "Permit Exp Date": "TEXT",  # stored as "MM/DD/YYYY"
-    "CLICK Start Date": "TEXT",  # NEW: stored as "MM/DD/YYYY"
-    "CLICK End Date": "TEXT",  # NEW: stored as "MM/DD/YYYY"
+    "Planning Order": "INTEGER",           # not needed
+    "Resource": "TEXT",                    # not needed
+    "Work Plan Date": "TEXT",              # stored as "MM/DD/YYYY"
+    "Permit Exp Date": "TEXT",             # stored as "MM/DD/YYYY"
+    "CLICK Start Date": "TEXT",            # stored as "MM/DD/YYYY"
+    "CLICK End Date": "TEXT",              # stored as "MM/DD/YYYY"
     "Project Reporting Year": "INTEGER",
     "Program": "TEXT",
     "Sub-Category": "TEXT",
@@ -74,9 +74,9 @@ MPP_SCHEMA: Dict[str, str] = {
     "Priority": "TEXT",
     "MAT": "TEXT",
     "Notif Status": "TEXT",
-    "Order User Status": "TEXT",  # not needed
+    "Order User Status": "TEXT",           # not needed
     "Primary Status": "TEXT",
-    "Job Owner": "TEXT",  # not needed
+    "Job Owner": "TEXT",                   # not needed
     "Project Managed Flag": "TEXT",
 }
 
@@ -91,25 +91,21 @@ def ensure_db() -> None:
         cur = conn.cursor()
         # mpp_data table (create if missing; on replace we’ll overwrite via to_sql)
         cols_sql = ", ".join([f'"{c}" {t}' for c, t in MPP_SCHEMA.items()])
-        cur.execute(
-            f"""
+        cur.execute(f'''
             CREATE TABLE IF NOT EXISTS mpp_data (
                 {cols_sql}
             )
-        """
-        )
+        ''')
         # order_tracking_list (unique Order list we track forever)
-        cur.execute(
-            """
+        cur.execute('''
             CREATE TABLE IF NOT EXISTS order_tracking_list (
                 "Order" INTEGER PRIMARY KEY
             )
-        """
-        )
+        ''')
         # Placeholder shells; real importers will replace these
-        cur.execute("CREATE TABLE IF NOT EXISTS sap_data (dummy TEXT);")
-        cur.execute("CREATE TABLE IF NOT EXISTS epw_data (dummy TEXT);")
-        cur.execute("CREATE TABLE IF NOT EXISTS land_data (dummy TEXT);")
+        cur.execute('CREATE TABLE IF NOT EXISTS sap_data (dummy TEXT);')
+        cur.execute('CREATE TABLE IF NOT EXISTS epw_data (dummy TEXT);')
+        cur.execute('CREATE TABLE IF NOT EXISTS land_data (dummy TEXT);')
         conn.commit()
 
 
@@ -134,11 +130,10 @@ def _coerce_date_mdy(series: pd.Series) -> pd.Series:
        - Epoch seconds / milliseconds
        - 2-digit years and month-name formats
     """
-
     def from_excel_serial(x):
         # Pandas handles Excel 1900 system via origin='1899-12-30'
         try:
-            return pd.to_datetime(float(x), unit="D", origin="1899-12-30", errors="coerce")
+            return pd.to_datetime(float(x), unit='D', origin='1899-12-30', errors='coerce')
         except Exception:
             return pd.NaT
 
@@ -148,12 +143,12 @@ def _coerce_date_mdy(series: pd.Series) -> pd.Series:
             x = float(x)
         except Exception:
             return pd.NaT
-        if x > 1e12:  # micro/nano—too big, bail
+        if x > 1e12:   # micro/nano—too big, bail
             return pd.NaT
-        if x > 1e11:  # ~> 1973 in milliseconds
-            return pd.to_datetime(x, unit="ms", errors="coerce")
-        if x > 1e9:  # ~> 2001 in seconds
-            return pd.to_datetime(x, unit="s", errors="coerce")
+        if x > 1e11:   # ~> 1973 in milliseconds
+            return pd.to_datetime(x, unit='ms', errors='coerce')
+        if x > 1e9:    # ~> 2001 in seconds
+            return pd.to_datetime(x, unit='s', errors='coerce')
         return pd.NaT
 
     def to_mdy(val) -> str:
@@ -165,14 +160,14 @@ def _coerce_date_mdy(series: pd.Series) -> pd.Series:
             return ""
 
         # If it's already a Timestamp or datetime-like
-        if isinstance(val, (pd.Timestamp,)):
+        if isinstance(val, (pd.Timestamp, )):
             dt = pd.Timestamp(val)
             if pd.isna(dt):
                 return ""
             return dt.strftime("%m/%d/%Y")
 
         # Numeric? Try Excel serial or epoch
-        if isinstance(val, (int, float)) or s.replace(".", "", 1).isdigit():
+        if isinstance(val, (int, float)) or s.replace('.', '', 1).isdigit():
             # 1) Excel serial
             dt = from_excel_serial(val)
             if not pd.isna(dt):
@@ -189,18 +184,10 @@ def _coerce_date_mdy(series: pd.Series) -> pd.Series:
 
         # 2) Try common explicit formats (including 2-digit years and month names)
         fmts = [
-            "%m/%d/%Y",
-            "%m-%d-%Y",
-            "%Y-%m-%d",
-            "%m/%d/%y",
-            "%m-%d-%y",
-            "%Y/%m/%d",
-            "%d-%b-%Y",
-            "%d-%b-%y",
-            "%b %d, %Y",
-            "%m/%d/%Y %H:%M",
-            "%Y-%m-%d %H:%M",
-            "%m/%d/%y %H:%M",
+            "%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d",
+            "%m/%d/%y", "%m-%d-%y",
+            "%Y/%m/%d", "%d-%b-%Y", "%d-%b-%y", "%b %d, %Y",
+            "%m/%d/%Y %H:%M", "%Y-%m-%d %H:%M", "%m/%d/%y %H:%M",
         ]
         for fmt in fmts:
             try:
@@ -261,14 +248,14 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         "Primary Status",
         "Job Owner",
         "Project Managed Flag",
-        "Mega Bundle Flag",  # NEW: only for filtering
+        "Mega Bundle Flag",  # NEW: only used for filtering
     ]
 
     # --- Single-pass read (no header-only pre-pass) ---
     read_kwargs = dict(
         usecols=lambda c: c in needed_cols,  # loads intersection; no error on missing
-        dtype=str,  # keep as plain Python strings
-        na_filter=False,  # faster: don't try to infer NaNs
+        dtype=str,                           # keep as plain Python strings
+        na_filter=False,                     # faster: don't try to infer NaNs
         low_memory=False,
     )
 
@@ -283,7 +270,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         if c not in df.columns:
             df[c] = ""
 
-    # Reorder columns (includes Mega Bundle Flag just for filtering)
+    # Reorder columns (includes Mega Bundle Flag, which we only use for filtering)
     df = df[needed_cols]
 
     # ---------- FAST FILTERING ON RAW STRINGS ----------
@@ -308,12 +295,14 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         & (notif_u != NOTIF_STATUS_TO_REMOVE)
         & sap_status.isin(allowed_sap_status)
         & (priority != NOT_ALLOWED_PRIORITY.upper())
-        & (mega_flag_u != "Y")  # NEW: drop Mega Bundle rows
+        & (mega_flag_u != "Y")  # NEW: drop Mega Bundle = Y
     )
 
     df = df.loc[mask].reset_index(drop=True)
 
-    # Optionally drop Mega Bundle Flag; not needed in mpp_data
+    # We don't want Mega Bundle Flag in mpp_data; it's not in MPP_SCHEMA,
+    # and _apply_target_dtypes only keeps MPP_SCHEMA columns anyway.
+    # (Optional explicit cleanup, not strictly necessary)
     # df = df.drop(columns=["Mega Bundle Flag"], errors="ignore")
 
     # ---------- Only now apply expensive dtype coercion ----------
@@ -331,6 +320,7 @@ def replace_mpp_data(df: pd.DataFrame) -> int:
     with sqlite3.connect(dbp) as conn:
         df.to_sql("mpp_data", conn, if_exists="replace", index=False)
         return len(df)
+
 
 # ------------------------
 # Order-tracking list management
@@ -354,15 +344,13 @@ def update_order_tracking_list_from_mpp() -> Tuple[int, int]:
         df_orders = pd.read_sql_query(
             'SELECT DISTINCT "Order" FROM mpp_data WHERE "Order" IS NOT NULL', conn
         )
-        new_orders = (
-            set(
-                df_orders["Order"]
-                .dropna()
-                .astype("Int64")
-                .dropna()
-                .astype(int)
-                .tolist()
-            )
+        new_orders = set(
+            df_orders["Order"]
+            .dropna()
+            .astype("Int64")
+            .dropna()
+            .astype(int)
+            .tolist()
         )
         have = _existing_orders(conn)
         to_insert = sorted(list(new_orders - have))
@@ -381,7 +369,7 @@ def seed_order_tracking_list_if_empty() -> int:
     dbp = default_db_path()
     with sqlite3.connect(dbp) as conn:
         cur = conn.cursor()
-        cur.execute("SELECT COUNT(1) FROM order_tracking_list")
+        cur.execute('SELECT COUNT(1) FROM order_tracking_list')
         has = cur.fetchone()[0]
         if has > 0:
             return 0
@@ -414,7 +402,6 @@ def get_order_tracking_df() -> pd.DataFrame:
             'SELECT "Order" FROM order_tracking_list ORDER BY "Order" ASC', conn
         )
     return df
-
 
 # ------------------------
 # LOOKUP HELPERS
@@ -491,7 +478,7 @@ def get_sap_code_summary_by_order(order_num: int) -> pd.DataFrame:
 
     # Parse dates
     astart = pd.to_datetime(df["ActualStart"], errors="coerce", infer_datetime_format=True)
-    cdone = pd.to_datetime(df["Completed On"], errors="coerce", infer_datetime_format=True)
+    cdone  = pd.to_datetime(df["Completed On"], errors="coerce", infer_datetime_format=True)
 
     # Sort key: prefer the latest among Completed On / ActualStart
     sort_key = pd.concat([cdone.rename("k1"), astart.rename("k2")], axis=1).max(axis=1)
@@ -504,12 +491,12 @@ def get_sap_code_summary_by_order(order_num: int) -> pd.DataFrame:
     keep = df_sorted.drop_duplicates(subset=["Code"], keep="first").copy()
 
     # Format date columns to MM/DD/YYYY text
-    keep["ActualStart"] = (
-        pd.to_datetime(keep["ActualStart"], errors="coerce").apply(_fmt_mdy)
-    )
-    keep["Completed On"] = (
-        pd.to_datetime(keep["Completed On"], errors="coerce").apply(_fmt_mdy)
-    )
+    keep["ActualStart"]  = pd.to_datetime(
+        keep["ActualStart"], errors="coerce"
+    ).apply(_fmt_mdy)
+    keep["Completed On"] = pd.to_datetime(
+        keep["Completed On"], errors="coerce"
+    ).apply(_fmt_mdy)
 
     cols = ["Code", "ActualStart", "Completed On", "TaskUsrStatus", "Completed By"]
     return keep.loc[:, cols].reset_index(drop=True)

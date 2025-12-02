@@ -5,7 +5,7 @@ from tkinter import ttk, messagebox
 
 from core.base import ToolView  # Frame-like base
 
-from helpers.maintenance_tracker_builder.logic import (
+from helpers.maintenance_rfc_tracker_builder.logic import (
     fetch_mpp_first_for_order,
     fetch_sap_summary_for_order,
     fetch_epw_first_for_order,
@@ -13,7 +13,7 @@ from helpers.maintenance_tracker_builder.logic import (
     fetch_open_dependencies_for_order,  # <-- NEW
 )
 
-class Maintenance_Order_Information(ToolView):
+class Maintenance_Order_Information_RFC(ToolView):
     """
     Order lookup UI with four result panels (MPP, SAP, EPW, Land) in a 2×2 grid,
     plus a right-side vertical summary table that spans the full height of the grid.

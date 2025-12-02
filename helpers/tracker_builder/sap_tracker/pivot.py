@@ -83,6 +83,8 @@ def update_codes_batch(conn: sqlite3.Connection) -> int:
     pe_placeholders = ",".join("?" for _ in PENDING_STATUSES)
     ap_placeholders = ",".join("?" for _ in AP_ALLOWED_STATUSES)
 
+    # we cannot say NOTN anymore for the leaps tasks anymore. we need to say unknown there. and that is for non-estimated jobs.
+
     cur.execute("DROP TABLE IF EXISTS __codes_final")
     cur.execute(f"""
         CREATE TEMP TABLE __codes_final AS
@@ -90,7 +92,7 @@ def update_codes_batch(conn: sqlite3.Connection) -> int:
             p."Order",
             -- SP56
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
-                 WHEN COALESCE(p.has_sp56,0)=1 THEN COALESCE(p.tus_sp56,'ACTD') ELSE 'NOTN' END AS SP56,
+                 WHEN COALESCE(p.has_sp56,0)=1 THEN COALESCE(p.tus_sp56,'ACTD') ELSE 'NOTN' END AS SP56,    
             -- RP56
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
                  WHEN COALESCE(p.has_rp56,0)=1 THEN COALESCE(p.tus_rp56,'ACTD') ELSE 'NOTN' END AS RP56,
