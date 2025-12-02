@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Tuple
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from core.base import ToolView, FONT_H1  # FONT_H1 may be unused but is fine
+from core.base import ToolView, FONT_H1, FONT_H2  # FONT_H1 may be unused but is fine
 
 from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db
 
@@ -120,18 +120,17 @@ class MASTER_TRACKER_BUILDER(ToolView):
         self._build_ui()
         self._wire_signals()
 
-    # ------------------------------------------------------------------
-    # UI
-    # ------------------------------------------------------------------
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
+
+        # Common label width so all URL bars line up
+        label_width = 24  # tweak this number until it looks right
 
         # ---- Row 3: Step 1 title ----
         ttk.Label(
             self,
-            text=(
-                "Step 1: Upload latest copy of MPP and update all tracker databases"
-            ),
+            text="Step 1: Extract data from MPP Database",
+            font=FONT_H2,
         ).grid(row=3, column=0, columnspan=6, sticky="w", pady=(8, 4), padx=16)
 
         # ---- Row 4: "MPP Database:" [Entry] [Browse] [Update MPP Database] ----
@@ -139,7 +138,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         fr4.grid(row=4, column=0, columnspan=6, sticky="ew", padx=16, pady=4)
         fr4.columnconfigure(1, weight=1)
 
-        ttk.Label(fr4, text="MPP Database:").grid(
+        ttk.Label(fr4, text="MPP Database:", width=label_width).grid(
             row=0, column=0, sticky="w", padx=(0, 8)
         )
 
@@ -160,7 +159,8 @@ class MASTER_TRACKER_BUILDER(ToolView):
         # ---- Row 5: Step 2 title ----
         ttk.Label(
             self,
-            text="Step 2: Update SAP, EPW, and Land data for all trackers",
+            text="Step 2: Get data from SAP",
+            font=FONT_H2,
         ).grid(row=5, column=0, columnspan=6, sticky="w", padx=16, pady=(16, 2))
 
         # ---- Row 6: SAP Data (all trackers) ----
@@ -169,7 +169,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         fr6.grid(row=6, column=0, columnspan=6, sticky="ew", padx=16, pady=4)
         fr6.columnconfigure(1, weight=1)
 
-        ttk.Label(fr6, text="SAP Data (all trackers)").grid(
+        ttk.Label(fr6, text="SAP Data (all trackers)", width=label_width).grid(
             row=0, column=0, sticky="w", padx=(0, 8)
         )
         ttk.Entry(fr6, textvariable=self.var_sap).grid(
@@ -186,12 +186,19 @@ class MASTER_TRACKER_BUILDER(ToolView):
             command=self._on_extract_sap_data,
         ).grid(row=0, column=3, sticky="w")
 
-        # ---- Rows 7–10: Per-tracker SAP file paths ----
+        # ---- Row 7: Step 3 title ----
+        ttk.Label(
+            self,
+            text="Step 3: Extract data from SAP, Land, and EPW Database",
+            font=FONT_H2,
+        ).grid(row=7, column=0, columnspan=6, sticky="w", padx=16, pady=(16, 2))
+
+        # ---- Rows 8–11: Per-tracker SAP file paths ----
         def _make_sap_row(row: int, label: str, var: tk.StringVar) -> None:
             fr = ttk.Frame(self)
             fr.grid(row=row, column=0, columnspan=6, sticky="ew", padx=16, pady=2)
             fr.columnconfigure(1, weight=1)
-            ttk.Label(fr, text=label).grid(
+            ttk.Label(fr, text=label, width=label_width).grid(
                 row=0, column=0, sticky="w", padx=(0, 8)
             )
             ttk.Entry(fr, textvariable=var).grid(
@@ -203,17 +210,17 @@ class MASTER_TRACKER_BUILDER(ToolView):
                 command=lambda v=var: self._browse_excel(v),
             ).grid(row=0, column=2, sticky="w")
 
-        _make_sap_row(7, "Maintenance SAP Data:", self.var_sap_maint)
-        _make_sap_row(8, "Poles SAP Data:", self.var_sap_poles)
-        _make_sap_row(9, "Poles RFC SAP Data:", self.var_sap_poles_rfc)
-        _make_sap_row(10, "WMP SAP Data:", self.var_sap_wmp)
+        _make_sap_row(8,  "Maintenance SAP Data:", self.var_sap_maint)
+        _make_sap_row(9,  "Poles SAP Data:", self.var_sap_poles)
+        _make_sap_row(10, "Poles RFC SAP Data:", self.var_sap_poles_rfc)
+        _make_sap_row(11, "WMP SAP Data:", self.var_sap_wmp)
 
-        # ---- Rows 11–12: Shared EPW / Land inputs ----
+        # ---- Rows 12–13: Shared EPW / Land inputs ----
         def _make_row(row: int, label: str, var: tk.StringVar) -> None:
             fr = ttk.Frame(self)
             fr.grid(row=row, column=0, columnspan=6, sticky="ew", padx=16, pady=4)
             fr.columnconfigure(1, weight=1)
-            ttk.Label(fr, text=label).grid(
+            ttk.Label(fr, text=label, width=label_width).grid(
                 row=0, column=0, sticky="w", padx=(0, 8)
             )
             ttk.Entry(fr, textvariable=var).grid(
@@ -225,13 +232,13 @@ class MASTER_TRACKER_BUILDER(ToolView):
                 command=lambda v=var: self._browse_excel(v),
             ).grid(row=0, column=2, sticky="w")
 
-        _make_row(11, "EPW Data", self.var_epw)
-        _make_row(12, "Land Data", self.var_land)
+        _make_row(12, "EPW Data", self.var_epw)
+        _make_row(13, "Land Data", self.var_land)
 
-        # ---- Row 13: Extract Data button ----
+        # ---- Row 14: Extract Data button ----
         fr_btn = ttk.Frame(self)
         fr_btn.grid(
-            row=13,
+            row=14,
             column=0,
             columnspan=6,
             sticky="w",
@@ -246,15 +253,15 @@ class MASTER_TRACKER_BUILDER(ToolView):
         )
         self.btn_extract.grid(row=0, column=0)
 
-        # ---- Row 14: Tracker Tools heading ----
+        # ---- Row 15: Tracker Tools heading ----
         ttk.Label(self, text="Tracker Tools", font=FONT_H1).grid(
-            row=14, column=0, columnspan=6, sticky="w", padx=16, pady=(12, 4)
+            row=15, column=0, columnspan=6, sticky="w", padx=16, pady=(12, 4)
         )
 
-        # ---- Row 15: Tools row (left-aligned Update Trackers) ----
+        # ---- Row 16: Tools row (left-aligned Update Trackers) ----
         fr_tools = ttk.Frame(self)
         fr_tools.grid(
-            row=15, column=0, columnspan=6, sticky="w", padx=16, pady=(0, 8)
+            row=16, column=0, columnspan=6, sticky="w", padx=16, pady=(0, 8)
         )
 
         self.btn_update_trackers = ttk.Button(
