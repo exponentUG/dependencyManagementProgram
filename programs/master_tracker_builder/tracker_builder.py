@@ -11,10 +11,9 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from helpers.wmp_tracker_builder.logic import today_strings
 
-
 from core.base import ToolView, FONT_H1, FONT_H2  # FONT_H1 may be unused but is fine
 
-from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db
+from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db, maintenance_rfc_db
 
 from helpers.sap_reports.master_tracker_builder.task_management_master import (
     run_multi_tm_export,
@@ -46,6 +45,7 @@ TRACKER_MODES = [
 DB_CHOICES = [
     "WMP",
     "Maintenance",
+    "Maintenance RFC",
     "Poles",
     "Poles RFC",
 ]
@@ -61,6 +61,10 @@ from ledgers.tracker_conditions_ledger.poles import (
 from ledgers.tracker_conditions_ledger.poles_rfc import (
     ALLOWED_MAT as ALLOWED_MAT_POLES_RFC,
     ALLOWED_SAP_STATUS as ALLOWED_SAP_STATUS_POLES_RFC,
+)
+from ledgers.tracker_conditions_ledger.maintenance_rfc import (
+    ALLOWED_MAT as ALLOWED_MAT_MAINT_RFC,
+    ALLOWED_SAP_STATUS as ALLOWED_SAP_STATUS_MAINT_RFC,
 )
 from ledgers.tracker_conditions_ledger.wmp import ALLOWED_MAT as ALLOWED_MAT_WMP
 
@@ -127,6 +131,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         self.var_sap_poles = tk.StringVar()
         self.var_sap_poles_rfc = tk.StringVar()
         self.var_sap_wmp = tk.StringVar()
+        self.var_sap_maint_rfc = tk.StringVar()
 
         self.var_epw = tk.StringVar()
         self.var_land = tk.StringVar()
@@ -135,6 +140,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         for v in (
             self.var_sap,
             self.var_sap_maint,
+            self.var_sap_maint_rfc,
             self.var_sap_poles,
             self.var_sap_poles_rfc,
             self.var_sap_wmp,
@@ -248,11 +254,12 @@ class MASTER_TRACKER_BUILDER(ToolView):
             ).grid(row=0, column=2, sticky="w")
 
         _make_sap_row(8,  "Maintenance SAP Data:", self.var_sap_maint)
-        _make_sap_row(9,  "Poles SAP Data:", self.var_sap_poles)
-        _make_sap_row(10, "Poles RFC SAP Data:", self.var_sap_poles_rfc)
-        _make_sap_row(11, "WMP SAP Data:", self.var_sap_wmp)
+        _make_sap_row(9,  "Maintenance RFC SAP Data:", self.var_sap_maint_rfc)
+        _make_sap_row(10, "Poles SAP Data:", self.var_sap_poles)
+        _make_sap_row(11, "Poles RFC SAP Data:", self.var_sap_poles_rfc)
+        _make_sap_row(12, "WMP SAP Data:", self.var_sap_wmp)
 
-        # ---- Rows 12–13: Shared EPW / Land inputs ----
+        # ---- Rows 13–14: Shared EPW / Land inputs ----
         def _make_row(row: int, label: str, var: tk.StringVar) -> None:
             fr = ttk.Frame(self)
             fr.grid(row=row, column=0, columnspan=6, sticky="ew", padx=16, pady=4)
@@ -269,13 +276,13 @@ class MASTER_TRACKER_BUILDER(ToolView):
                 command=lambda v=var: self._browse_excel(v),
             ).grid(row=0, column=2, sticky="w")
 
-        _make_row(12, "EPW Data", self.var_epw)
-        _make_row(13, "Land Data", self.var_land)
+        _make_row(13, "EPW Data", self.var_epw)
+        _make_row(14, "Land Data", self.var_land)
 
-        # ---- Row 14: Extract Data button ----
+        # ---- Row 15: Extract Data button ----
         fr_btn = ttk.Frame(self)
         fr_btn.grid(
-            row=14,
+            row=15,
             column=0,
             columnspan=6,
             sticky="w",
@@ -290,17 +297,17 @@ class MASTER_TRACKER_BUILDER(ToolView):
         )
         self.btn_extract.grid(row=0, column=0)
 
-        # ---- Row 15: Tracker Tools heading ----
+        # ---- Row 16: Tracker Tools heading ----
         ttk.Label(self, text="Tracker Tools", font=FONT_H1).grid(
-            row=15, column=0, columnspan=6, sticky="w", padx=16, pady=(12, 4)
+            row=16, column=0, columnspan=6, sticky="w", padx=16, pady=(12, 4)
         )
 
-        # ---- Row 16: Tools row
+        # ---- Row 17: Tools row
         # left: Update Trackers
         # right: Database + Tracker dropdowns
         fr_tools = ttk.Frame(self)
         fr_tools.grid(
-            row=16, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 8)
+            row=17, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 8)
         )
         fr_tools.columnconfigure(0, weight=0)  # left buttons
         fr_tools.columnconfigure(1, weight=1)  # spacer
@@ -354,19 +361,19 @@ class MASTER_TRACKER_BUILDER(ToolView):
         self.tracker_dd.grid(row=0, column=3, sticky="e")
         self.tracker_dd.bind("<<ComboboxSelected>>", lambda _e: self._refresh_table())
 
-        # ---- Row 17: Row Count (between tools and table)
+        # ---- Row 18: Row Count (between tools and table)
         fr_count = ttk.Frame(self)
         fr_count.grid(
-            row=17, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6)
+            row=18, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6)
         )
         ttk.Label(fr_count, textvariable=self.count_var).grid(
             row=0, column=0, sticky="w"
         )
 
-        # ---- Row 18: Table (Treeview) with scrollbars
+        # ---- Row 19: Table (Treeview) with scrollbars
         lf = ttk.LabelFrame(self, text="Tracker View")
         lf.grid(
-            row=18, column=0, columnspan=6,
+            row=19, column=0, columnspan=6,
             sticky="nsew", padx=16, pady=(0, 12)
         )
 
@@ -385,7 +392,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         lf.columnconfigure(0, weight=1)
 
         # Let the table area grow
-        self.rowconfigure(18, weight=1)
+        self.rowconfigure(19, weight=1)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
@@ -434,10 +441,11 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
             # (Label for messages, file prefix, db module)
             trackers = [
-                ("WMP",         "WMP Tracker",         wmp_db),
-                ("Maintenance", "Maintenance Tracker", maintenance_db),
-                ("Poles",       "Poles Tracker",       poles_db),
-                ("Poles RFC",   "Poles RFC Tracker",   poles_rfc_db),
+                ("WMP",           "WMP Tracker",           wmp_db),
+                ("Maintenance",   "Maintenance Tracker",   maintenance_db),
+                ("Maintenance RFC","Maintenance RFC Tracker", maintenance_rfc_db),
+                ("Poles",         "Poles Tracker",         poles_db),
+                ("Poles RFC",     "Poles RFC Tracker",     poles_rfc_db),
             ]
 
             successes: list[str] = []
@@ -527,6 +535,8 @@ class MASTER_TRACKER_BUILDER(ToolView):
             return wmp_db.default_db_path()
         if name == "Maintenance":
             return maintenance_db.default_db_path()
+        if name == "Maintenance RFC":
+            return maintenance_rfc_db.default_db_path()
         if name == "Poles":
             return poles_db.default_db_path()
         if name == "Poles RFC":
@@ -682,6 +692,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
             trackers = [
                 ("WMP", wmp_db),
                 ("Maintenance", maintenance_db),
+                ("Maintenance RFC", maintenance_rfc_db),
                 ("Poles", poles_db),
                 ("Poles RFC", poles_rfc_db),
             ]
@@ -842,6 +853,9 @@ class MASTER_TRACKER_BUILDER(ToolView):
             self.var_sap_wmp.set(
                 _join(f"WMP SAP Data - {today_str}.xlsx")
             )
+            self.var_sap_maint_rfc.set(
+                _join(f"Maintenance RFC SAP Data - {today_str}.xlsx")
+            )
 
         # Re-evaluate whether "Extract Data" can be enabled
         self._update_step2_state()
@@ -859,12 +873,14 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
         required_paths = [
             self.var_sap_maint.get().strip(),
+            self.var_sap_maint_rfc.get().strip(),
             self.var_sap_poles.get().strip(),
             self.var_sap_poles_rfc.get().strip(),
             self.var_sap_wmp.get().strip(),
             self.var_epw.get().strip(),
             self.var_land.get().strip(),
         ]
+
         all_ok = all(p and os.path.isfile(p) for p in required_paths)
         self.btn_extract.configure(state=("normal" if all_ok else "disabled"))
 
@@ -880,6 +896,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         """
         paths = {
             "Maintenance SAP": self.var_sap_maint.get().strip(),
+            "Maintenance RFC SAP": self.var_sap_maint_rfc.get().strip(),
             "Poles SAP": self.var_sap_poles.get().strip(),
             "Poles RFC SAP": self.var_sap_poles_rfc.get().strip(),
             "WMP SAP": self.var_sap_wmp.get().strip(),
@@ -917,6 +934,15 @@ class MASTER_TRACKER_BUILDER(ToolView):
                         ALLOWED_SAP_STATUS_MAINT,
                     ),
                     (
+                        "Maintenance RFC",
+                        maintenance_rfc_db,
+                        paths["Maintenance RFC SAP"],
+                        ALLOWED_MAT_MAINT_RFC,
+                        True,   # same behavior as Maintenance
+                        True,
+                        ALLOWED_SAP_STATUS_MAINT_RFC,
+                    ),
+                    (
                         "Poles",
                         poles_db,
                         paths["Poles SAP"],
@@ -944,6 +970,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
                         None,
                     ),
                 ]
+
 
                 epw_path = paths["EPW"]
                 land_path = paths["LAND"]
@@ -1061,6 +1088,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         trackers = [
             ("WMP", wmp_db),
             ("Maintenance", maintenance_db),
+            ("Maintenance RFC", maintenance_rfc_db),
             ("Poles", poles_db),
             ("Poles RFC", poles_rfc_db),
         ]
