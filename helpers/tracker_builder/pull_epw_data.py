@@ -22,7 +22,7 @@ def _ci(df: pd.DataFrame, name: str) -> str | None:
             return c
     return None
 
-def pull_epw_data(db_path: str, xlsx_path: str, ALLOWED_MAT: Set[str]) -> Tuple[str, int]:
+def pull_epw_data(db_path: str, xlsx_path: str, ALLOWED_MAT: Set[str], REMOVE_BTAG: bool = False) -> Tuple[str, int]:
     """
     Read Excel 'Export' → normalize to 'epw_data', filter MAT to ALLOWED_MAT.
     Datatypes to store per spec.
@@ -89,6 +89,9 @@ def pull_epw_data(db_path: str, xlsx_path: str, ALLOWED_MAT: Set[str]) -> Tuple[
     # filter MAT and clean
     out = out[out["MAT"].str.upper().isin(ALLOWED_MAT)]
     out = out.dropna(subset=["Order Number"])
+
+    if REMOVE_BTAG:
+        out = out[out["Priority"] != "B"]
 
     with sqlite3.connect(db_path) as conn:
         out.to_sql("epw_data", conn, if_exists="replace", index=False)
