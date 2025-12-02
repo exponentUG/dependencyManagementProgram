@@ -150,23 +150,36 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
     """)
 
     # 3) EPW one-per-order and normalize expiration
+    #    Optimized: use ROW_NUMBER() instead of correlated subquery
     cur.executescript("""
         DROP TABLE IF EXISTS __pt_epw_one;
         CREATE TEMP TABLE __pt_epw_one AS
         WITH c AS (
-          SELECT
-              "Order Number" AS order_num,
-              "EPW Status" AS epw_status,
-              "Epermit Update" AS epermit_update,
-              "EPW Submit Days in Age" AS submit_days,
-              "EPW Expiration Date" AS epw_exp_raw,
-              "Cycle Time" AS cycle_time,
-              rowid AS rid
-          FROM epw_data
+            SELECT
+                "Order Number" AS order_num,
+                "EPW Status" AS epw_status,
+                "Epermit Update" AS epermit_update,
+                "EPW Submit Days in Age" AS submit_days,
+                "EPW Expiration Date" AS epw_exp_raw,
+                "Cycle Time" AS cycle_time,
+                rowid AS rid
+            FROM epw_data
+        ),
+        ranked AS (
+            SELECT
+                c.*,
+                ROW_NUMBER() OVER (PARTITION BY order_num ORDER BY rid) AS rn
+            FROM c
         )
-        SELECT c1.order_num, c1.epw_status, c1.epermit_update, c1.submit_days, c1.epw_exp_raw, c1.cycle_time
-        FROM c c1
-        WHERE c1.rid = (SELECT MIN(c2.rid) FROM c c2 WHERE c2.order_num = c1.order_num);
+        SELECT
+            order_num,
+            epw_status,
+            epermit_update,
+            submit_days,
+            epw_exp_raw,
+            cycle_time
+        FROM ranked
+        WHERE rn = 1;
 
         DROP TABLE IF EXISTS __pt_epw_norm;
         CREATE TEMP TABLE __pt_epw_norm AS
@@ -284,7 +297,8 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
 
     # 8) Action logic (with bound params)
     cur.executescript("DROP TABLE IF EXISTS __pt_action;")
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TEMP TABLE __pt_action AS
         SELECT
           "Order",
@@ -333,18 +347,20 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
             ELSE 'check'
           END AS action_text
         FROM __pt_with_exp
-    """, (
-        today_iso,   # future check
-        today_iso,   # past (no click)
-        today_iso,   # past exp
-        today_iso,   # click >= today
-        today_iso,   # past exp
-        today_iso,   # click < today
-        today_iso,   # WPD past
-        today_iso,   # WPD future or null
-        "2026-01-01",# WPD >= 2026-01-01 (per current logic)
-        today_iso,   # WPD past
-    ))
+        """,
+        (
+            today_iso,   # future check
+            today_iso,   # past (no click)
+            today_iso,   # past exp
+            today_iso,   # click >= today
+            today_iso,   # past exp
+            today_iso,   # click < today
+            today_iso,   # WPD past
+            today_iso,   # WPD future or null
+            "2026-01-01",# WPD >= 2026-01-01 (per current logic)
+            today_iso,   # WPD past
+        ),
+    )
 
     # 9) Final rows with formatted MM/DD/YYYY + Notification/SAP Status columns
     cur.executescript(f"""
@@ -367,17 +383,17 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
         FROM __pt_action;
     """)
 
-    # 10) Upsert into final table
+    # 10) Rebuild permit_tracker contents
     before = conn.total_changes
     cols_csv = ", ".join(f'"{c}"' for c in PERMIT_TRACKER_COLS)
 
-    # NEW: remove rows that are no longer in the current pending set
-    cur.execute('DELETE FROM permit_tracker WHERE "Order" NOT IN (SELECT "Order" FROM __permit_tracker_final)')
-
+    # Since permit_tracker is fully derived, we can safely clear and refill it
+    cur.execute("DELETE FROM permit_tracker;")
     cur.executescript(f"""
-        INSERT OR REPLACE INTO permit_tracker ({cols_csv})
+        INSERT INTO permit_tracker ({cols_csv})
         SELECT {cols_csv}
         FROM __permit_tracker_final;
     """)
     conn.commit()
     return conn.total_changes - before
+
