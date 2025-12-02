@@ -21,15 +21,19 @@ from helpers.tracker_builder.pull_epw_data import pull_epw_data
 from helpers.tracker_builder.pull_land_data import pull_land_data
 from helpers.tracker_builder.update_trackers import build_sap_tracker_initial
 
-from ledgers.tracker_conditions_ledger.wmp import ALLOWED_MAT as ALLOWED_MAT_WMP
 from ledgers.tracker_conditions_ledger.maintenance import (
     ALLOWED_MAT as ALLOWED_MAT_MAINT,
+    ALLOWED_SAP_STATUS as ALLOWED_SAP_STATUS_MAINT,
 )
-from ledgers.tracker_conditions_ledger.poles import ALLOWED_MAT as ALLOWED_MAT_POLES
+from ledgers.tracker_conditions_ledger.poles import (
+    ALLOWED_MAT as ALLOWED_MAT_POLES,
+    ALLOWED_SAP_STATUS as ALLOWED_SAP_STATUS_POLES,
+)
 from ledgers.tracker_conditions_ledger.poles_rfc import (
     ALLOWED_MAT as ALLOWED_MAT_POLES_RFC,
+    ALLOWED_SAP_STATUS as ALLOWED_SAP_STATUS_POLES_RFC,
 )
-
+from ledgers.tracker_conditions_ledger.wmp import ALLOWED_MAT as ALLOWED_MAT_WMP
 
 class BusyPopup(tk.Toplevel):
     """Simple indeterminate spinner modal for long-running tasks."""
@@ -500,6 +504,9 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
         - EPW + Land paths are *shared* across all trackers.
         - SAP path is taken from the respective per-tracker row.
+        - For Maintenance / Poles / Poles RFC we also:
+            * drop Priority = 'B'
+            * filter EPW rows to a subset of SAP statuses
         """
         paths = {
             "Maintenance SAP": self.var_sap_maint.get().strip(),
@@ -527,46 +534,78 @@ class MASTER_TRACKER_BUILDER(ToolView):
             try:
                 msgs: List[str] = []
 
+                # label,   db_module,    sap_path,                allowed_mat,
+                # remove_btag, remove_sap_status, sap_status_to_keep
                 trackers = [
                     (
                         "Maintenance",
                         maintenance_db,
                         paths["Maintenance SAP"],
                         ALLOWED_MAT_MAINT,
+                        True,   # REMOVE_BTAG
+                        True,   # REMOVE_SAP_STATUS
+                        ALLOWED_SAP_STATUS_MAINT,
                     ),
                     (
                         "Poles",
                         poles_db,
                         paths["Poles SAP"],
                         ALLOWED_MAT_POLES,
+                        True,
+                        True,
+                        ALLOWED_SAP_STATUS_POLES,
                     ),
                     (
                         "Poles RFC",
                         poles_rfc_db,
                         paths["Poles RFC SAP"],
                         ALLOWED_MAT_POLES_RFC,
+                        True,
+                        True,
+                        ALLOWED_SAP_STATUS_POLES_RFC,
                     ),
                     (
                         "WMP",
                         wmp_db,
                         paths["WMP SAP"],
                         ALLOWED_MAT_WMP,
+                        False,  # keep original behavior (no extra filtering)
+                        False,
+                        None,
                     ),
                 ]
 
                 epw_path = paths["EPW"]
                 land_path = paths["LAND"]
 
-                for label, db_mod, sap_path, allowed_mat in trackers:
+                for (
+                    label,
+                    db_mod,
+                    sap_path,
+                    allowed_mat,
+                    remove_btag,
+                    remove_sap_status,
+                    sap_status_to_keep,
+                ) in trackers:
                     db_path = db_mod.default_db_path()
                     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
+                    # SAP
                     t1, n1 = pull_sap_data(db_path, sap_path)
                     msgs.append(f"{label}: {t1} (SAP) = {n1:,} rows")
 
-                    t2, n2 = pull_epw_data(db_path, epw_path, allowed_mat)
+                    # EPW – now using the extended signature
+                    t2, n2 = pull_epw_data(
+                        db_path,
+                        epw_path,
+                        allowed_mat,
+                        REMOVE_BTAG=remove_btag,
+                        REMOVE_SAP_STATUS=remove_sap_status,
+                        SAP_STATUS_TO_KEEP=sap_status_to_keep,
+                    )
                     msgs.append(f"{label}: {t2} (EPW) = {n2:,} rows")
 
+                    # Land (unchanged)
                     t3, n3 = pull_land_data(db_path, land_path, allowed_mat)
                     msgs.append(f"{label}: {t3} (Land) = {n3:,} rows")
 
