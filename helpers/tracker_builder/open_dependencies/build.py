@@ -247,6 +247,8 @@ def build_open_dependencies(conn: sqlite3.Connection) -> int:
                     THEN 'Closed'
                   WHEN { "TRIM(lt_action)='Permit not required.'" if land_tracker_exists else "0" }
                     THEN 'Closed'
+                  WHEN { "(TRIM(lt_action)='Monument survey complete. No action required.' AND sp57='COMP' AND rp57='COMP')" if land_tracker_exists else "0" }
+                    THEN 'Closed'
                   WHEN sp57 IN ('INPR','ACTD')
                        OR rp57 IN ('INPR','INPT','ACTD')
                        OR (rp57='COMP' AND (land_iso IS NULL OR date(land_iso) < date(?)))
