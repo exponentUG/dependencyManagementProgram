@@ -96,18 +96,25 @@ def ensure_db() -> None:
                 {cols_sql}
             )
         ''')
+
         # order_tracking_list (unique Order list we track forever)
         cur.execute('''
             CREATE TABLE IF NOT EXISTS order_tracking_list (
                 "Order" INTEGER PRIMARY KEY
             )
         ''')
+
+        # --- NEW: make sure "Added On" column exists (migration-safe) ---
+        cur.execute("PRAGMA table_info(order_tracking_list)")
+        ot_cols = {row[1] for row in cur.fetchall()}
+        if "Added On" not in ot_cols:
+            cur.execute('ALTER TABLE order_tracking_list ADD COLUMN "Added On" TEXT')
+
         # Placeholder shells; real importers will replace these
         cur.execute('CREATE TABLE IF NOT EXISTS sap_data (dummy TEXT);')
         cur.execute('CREATE TABLE IF NOT EXISTS epw_data (dummy TEXT);')
         cur.execute('CREATE TABLE IF NOT EXISTS land_data (dummy TEXT);')
         conn.commit()
-
 
 # ------------------------
 # Coercion helpers
@@ -331,40 +338,49 @@ def _existing_orders(conn: sqlite3.Connection) -> set:
     rows = cur.fetchall()
     return {r[0] for r in rows}
 
-
 def update_order_tracking_list_from_mpp() -> Tuple[int, int]:
     """
     Reads Orders from mpp_data, appends any new into order_tracking_list.
     Returns (existing_count_before, inserted_count).
+
+    NEW: also sets "Added On" = today's date (MM/DD/YYYY) for any newly inserted orders.
+    Existing orders keep their original "Added On" value.
     """
     ensure_db()
     dbp = default_db_path()
     with sqlite3.connect(dbp) as conn:
         cur = conn.cursor()
+
         df_orders = pd.read_sql_query(
-            'SELECT DISTINCT "Order" FROM mpp_data WHERE "Order" IS NOT NULL', conn
+            'SELECT DISTINCT "Order" FROM mpp_data WHERE "Order" IS NOT NULL',
+            conn,
         )
-        new_orders = set(
+        new_orders = (
             df_orders["Order"]
             .dropna()
             .astype("Int64")
             .dropna()
             .astype(int)
-            .tolist()
         )
+        new_orders = set(new_orders.tolist())
+
         have = _existing_orders(conn)
         to_insert = sorted(list(new_orders - have))
-        if to_insert:
-            cur.executemany(
-                'INSERT OR IGNORE INTO order_tracking_list("Order") VALUES (?)',
-                [(int(o),) for o in to_insert],
-            )
-        conn.commit()
-        return (len(have), len(to_insert))
 
+        inserted_count = 0
+        if to_insert:
+            today_str = datetime.today().strftime("%m/%d/%Y")
+            cur.executemany(
+                'INSERT OR IGNORE INTO order_tracking_list("Order", "Added On") VALUES (?, ?)',
+                [(int(o), today_str) for o in to_insert],
+            )
+            inserted_count = len(to_insert)
+
+        conn.commit()
+        return (len(have), inserted_count)
 
 def seed_order_tracking_list_if_empty() -> int:
-    """If order_tracking_list empty, copy all orders from mpp_data."""
+    """If order_tracking_list empty, copy all orders from mpp_data with an Added On date."""
     ensure_db()
     dbp = default_db_path()
     with sqlite3.connect(dbp) as conn:
@@ -373,8 +389,10 @@ def seed_order_tracking_list_if_empty() -> int:
         has = cur.fetchone()[0]
         if has > 0:
             return 0
+
         df_orders = pd.read_sql_query(
-            'SELECT DISTINCT "Order" FROM mpp_data WHERE "Order" IS NOT NULL', conn
+            'SELECT DISTINCT "Order" FROM mpp_data WHERE "Order" IS NOT NULL',
+            conn,
         )
         vals = (
             df_orders["Order"]
@@ -384,15 +402,16 @@ def seed_order_tracking_list_if_empty() -> int:
             .astype(int)
             .tolist()
         )
+
         if vals:
+            today_str = datetime.today().strftime("%m/%d/%Y")
             cur.executemany(
-                'INSERT OR IGNORE INTO order_tracking_list("Order") VALUES (?)',
-                [(int(v),) for v in vals],
+                'INSERT OR IGNORE INTO order_tracking_list("Order", "Added On") VALUES (?, ?)',
+                [(int(v), today_str) for v in vals],
             )
             conn.commit()
             return len(vals)
         return 0
-
 
 def get_order_tracking_df() -> pd.DataFrame:
     ensure_db()

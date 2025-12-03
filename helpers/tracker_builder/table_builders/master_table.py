@@ -5,7 +5,7 @@ from typing import List, Tuple
 
 COLUMNS: List[str] = [
     "Order",
-    "Notification",          # <-- NEW COLUMN
+    "Notification",          # <-- from mpp_data
     "Project Reporting Year",
     "MAT Code",
     "Program",
@@ -17,172 +17,182 @@ COLUMNS: List[str] = [
     "CLICK End Date",
     "Notification Status",
     "SAP Status",
+    "Order User Status",     # <-- NEW COLUMN
+    "SP56",
+    "RP56",
+    "SP57",
+    "RP57",
+    "DS42",
+    "PC20",
+    "DS76",
+    "PC24",
+    "DS11",
+    "PC21",
+    "AP10",
+    "AP25",
+    "DS28",
+    "DS73",
     "Open Dependencies",
     "Stage of Job",
 ]
 
+
 def _table_exists(cur: sqlite3.Cursor, name: str) -> bool:
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (name,))
+    cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+        (name,),
+    )
     return cur.fetchone() is not None
+
 
 def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
     """
     Returns (columns, rows) for the Master view.
+
     - Requires order_tracking_list.
-    - mpp_data and open_dependencies are optional (their fields will be '').
+    - mpp_data, open_dependencies, and sap_tracker are all optional:
+        * If mpp_data is missing, all MPP fields are ''.
+        * If open_dependencies is missing, Open Dependencies / Stage of Job are ''.
+        * If sap_tracker is missing, all SP/RP/DS/PC/AP fields are ''.
     - If 'Stage of Job' column doesn't exist yet in open_dependencies, it is shown as ''.
     """
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
 
+        # Base table is always order_tracking_list; if missing, nothing to show.
         if not _table_exists(cur, "order_tracking_list"):
             return [], []
 
         has_mpp = _table_exists(cur, "mpp_data")
         has_open = _table_exists(cur, "open_dependencies")
+        has_sap = _table_exists(cur, "sap_tracker")
 
+        # Does open_dependencies have 'Stage of Job'?
         has_stage = False
         if has_open:
             cur.execute("PRAGMA table_info(open_dependencies)")
             od_cols = {row[1] for row in cur.fetchall()}
             has_stage = "Stage of Job" in od_cols
 
-        if has_mpp and has_open:
-            if has_stage:
-                sql = """
-                    SELECT
-                        ot."Order",
-                        COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
-                        COALESCE(m."Project Reporting Year", '')     AS "Project Reporting Year",
-                        COALESCE(m."MAT", '')                        AS "MAT Code",
-                        COALESCE(m."Program", '')                    AS "Program",
-                        COALESCE(m."Sub-Category", '')               AS "Sub-Category",
-                        COALESCE(m."Div", '')                        AS "Div",
-                        COALESCE(m."Region", '')                     AS "Region",
-                        COALESCE(m."Work Plan Date", '')             AS "WPD",
-                        COALESCE(m."CLICK Start Date", '')           AS "CLICK Start Date",
-                        COALESCE(m."CLICK End Date", '')             AS "CLICK End Date",
-                        COALESCE(m."Notif Status", '')               AS "Notification Status",
-                        COALESCE(m."Primary Status", '')             AS "SAP Status",
-                        COALESCE(od."Open Dependencies", '')         AS "Open Dependencies",
-                        COALESCE(od."Stage of Job", '')              AS "Stage of Job"
-                    FROM order_tracking_list ot
-                    LEFT JOIN mpp_data m           ON m."Order" = ot."Order"
-                    LEFT JOIN open_dependencies od ON od."Order" = ot."Order"
-                    ORDER BY ot."Order"
-                """
-            else:
-                sql = """
-                    SELECT
-                        ot."Order",
-                        COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
-                        COALESCE(m."Project Reporting Year", '')     AS "Project Reporting Year",
-                        COALESCE(m."MAT", '')                        AS "MAT Code",
-                        COALESCE(m."Program", '')                    AS "Program",
-                        COALESCE(m."Sub-Category", '')               AS "Sub-Category",
-                        COALESCE(m."Div", '')                        AS "Div",
-                        COALESCE(m."Region", '')                     AS "Region",
-                        COALESCE(m."Work Plan Date", '')             AS "WPD",
-                        COALESCE(m."CLICK Start Date", '')           AS "CLICK Start Date",
-                        COALESCE(m."CLICK End Date", '')             AS "CLICK End Date",
-                        COALESCE(m."Notif Status", '')               AS "Notification Status",
-                        COALESCE(m."Primary Status", '')             AS "SAP Status",
-                        COALESCE(od."Open Dependencies", '')         AS "Open Dependencies",
-                        ''                                           AS "Stage of Job"
-                    FROM order_tracking_list ot
-                    LEFT JOIN mpp_data m           ON m."Order" = ot."Order"
-                    LEFT JOIN open_dependencies od ON od."Order" = ot."Order"
-                    ORDER BY ot."Order"
-                """
-        elif has_mpp and not has_open:
-            sql = """
-                SELECT
-                    ot."Order",
-                    COALESCE(CAST(m."Notification" AS TEXT), '') AS "Notification",
-                    COALESCE(m."Project Reporting Year", '')     AS "Project Reporting Year",
-                    COALESCE(m."MAT", '')                        AS "MAT Code",
-                    COALESCE(m."Program", '')                    AS "Program",
-                    COALESCE(m."Sub-Category", '')               AS "Sub-Category",
-                    COALESCE(m."Div", '')                        AS "Div",
-                    COALESCE(m."Region", '')                     AS "Region",
-                    COALESCE(m."Work Plan Date", '')             AS "WPD",
-                    COALESCE(m."CLICK Start Date", '')           AS "CLICK Start Date",
-                    COALESCE(m."CLICK End Date", '')             AS "CLICK End Date",
-                    COALESCE(m."Notif Status", '')               AS "Notification Status",
-                    COALESCE(m."Primary Status", '')             AS "SAP Status",
-                    ''                                           AS "Open Dependencies",
-                    ''                                           AS "Stage of Job"
-                FROM order_tracking_list ot
-                LEFT JOIN mpp_data m ON m."Order" = ot."Order"
-                ORDER BY ot."Order"
-            """
-        elif not has_mpp and has_open:
-            if has_stage:
-                sql = """
-                    SELECT
-                        ot."Order",
-                        ''                                   AS "Notification",
-                        ''                                   AS "Project Reporting Year",
-                        ''                                   AS "MAT Code",
-                        ''                                   AS "Program",
-                        ''                                   AS "Sub-Category",
-                        ''                                   AS "Div",
-                        ''                                   AS "Region",
-                        ''                                   AS "WPD",
-                        ''                                   AS "CLICK Start Date",
-                        ''                                   AS "CLICK End Date",
-                        ''                                   AS "Notification Status",
-                        ''                                   AS "SAP Status",
-                        COALESCE(od."Open Dependencies", '') AS "Open Dependencies",
-                        COALESCE(od."Stage of Job", '')      AS "Stage of Job"
-                    FROM order_tracking_list ot
-                    LEFT JOIN open_dependencies od ON od."Order" = ot."Order"
-                    ORDER BY ot."Order"
-                """
-            else:
-                sql = """
-                    SELECT
-                        ot."Order",
-                        ''                                   AS "Notification",
-                        ''                                   AS "Project Reporting Year",
-                        ''                                   AS "MAT Code",
-                        ''                                   AS "Program",
-                        ''                                   AS "Sub-Category",
-                        ''                                   AS "Div",
-                        ''                                   AS "Region",
-                        ''                                   AS "WPD",
-                        ''                                   AS "CLICK Start Date",
-                        ''                                   AS "CLICK End Date",
-                        ''                                   AS "Notification Status",
-                        ''                                   AS "SAP Status",
-                        COALESCE(od."Open Dependencies", '') AS "Open Dependencies",
-                        ''                                   AS "Stage of Job"
-                    FROM order_tracking_list ot
-                    LEFT JOIN open_dependencies od ON od."Order" = ot."Order"
-                    ORDER BY ot."Order"
-                """
+        # --- Expression pieces depending on table availability -----------------
+        # MPP fields
+        if has_mpp:
+            notif_expr = 'COALESCE(CAST(m."Notification" AS TEXT), \'\')'
+            pry_expr = 'COALESCE(m."Project Reporting Year", \'\')'
+            mat_expr = 'COALESCE(m."MAT", \'\')'
+            prog_expr = 'COALESCE(m."Program", \'\')'
+            subcat_expr = 'COALESCE(m."Sub-Category", \'\')'
+            div_expr = 'COALESCE(m."Div", \'\')'
+            region_expr = 'COALESCE(m."Region", \'\')'
+            wpd_expr = 'COALESCE(m."Work Plan Date", \'\')'
+            click_start_expr = 'COALESCE(m."CLICK Start Date", \'\')'
+            click_end_expr = 'COALESCE(m."CLICK End Date", \'\')'
+            notif_status_expr = 'COALESCE(m."Notif Status", \'\')'
+            sap_status_expr = 'COALESCE(m."Primary Status", \'\')'
+            order_user_expr = 'COALESCE(m."Order User Status", \'\')'  # NEW
+            mpp_join = 'LEFT JOIN mpp_data m           ON m."Order" = ot."Order"'
         else:
-            # Neither mpp_data nor open_dependencies present
-            sql = """
-                SELECT
-                    ot."Order",
-                    '' AS "Notification",
-                    '' AS "Project Reporting Year",
-                    '' AS "MAT Code",
-                    '' AS "Program",
-                    '' AS "Sub-Category",
-                    '' AS "Div",
-                    '' AS "Region",
-                    '' AS "WPD",
-                    '' AS "CLICK Start Date",
-                    '' AS "CLICK End Date",
-                    '' AS "Notification Status",
-                    '' AS "SAP Status",
-                    '' AS "Open Dependencies",
-                    '' AS "Stage of Job"
-                FROM order_tracking_list ot
-                ORDER BY ot."Order"
-            """
+            notif_expr = "''"
+            pry_expr = "''"
+            mat_expr = "''"
+            prog_expr = "''"
+            subcat_expr = "''"
+            div_expr = "''"
+            region_expr = "''"
+            wpd_expr = "''"
+            click_start_expr = "''"
+            click_end_expr = "''"
+            notif_status_expr = "''"
+            sap_status_expr = "''"
+            order_user_expr = "''"  # NEW
+            mpp_join = ""
+
+        # open_dependencies fields
+        if has_open:
+            open_deps_expr = 'COALESCE(od."Open Dependencies", \'\')'
+            if has_stage:
+                stage_expr = 'COALESCE(od."Stage of Job", \'\')'
+            else:
+                stage_expr = "''"
+            open_join = 'LEFT JOIN open_dependencies od ON od."Order" = ot."Order"'
+        else:
+            open_deps_expr = "''"
+            stage_expr = "''"
+            open_join = ""
+
+        # sap_tracker fields
+        if has_sap:
+            sp56_expr = 'COALESCE(st."SP56", \'\')'
+            rp56_expr = 'COALESCE(st."RP56", \'\')'
+            sp57_expr = 'COALESCE(st."SP57", \'\')'
+            rp57_expr = 'COALESCE(st."RP57", \'\')'
+            ds42_expr = 'COALESCE(st."DS42", \'\')'
+            pc20_expr = 'COALESCE(st."PC20", \'\')'
+            ds76_expr = 'COALESCE(st."DS76", \'\')'
+            pc24_expr = 'COALESCE(st."PC24", \'\')'
+            ds11_expr = 'COALESCE(st."DS11", \'\')'
+            pc21_expr = 'COALESCE(st."PC21", \'\')'
+            ap10_expr = 'COALESCE(st."AP10", \'\')'
+            ap25_expr = 'COALESCE(st."AP25", \'\')'
+            ds28_expr = 'COALESCE(st."DS28", \'\')'
+            ds73_expr = 'COALESCE(st."DS73", \'\')'
+            sap_join = 'LEFT JOIN sap_tracker st       ON st."Order" = ot."Order"'
+        else:
+            sp56_expr = "''"
+            rp56_expr = "''"
+            sp57_expr = "''"
+            rp57_expr = "''"
+            ds42_expr = "''"
+            pc20_expr = "''"
+            ds76_expr = "''"
+            pc24_expr = "''"
+            ds11_expr = "''"
+            pc21_expr = "''"
+            ap10_expr = "''"
+            ap25_expr = "''"
+            ds28_expr = "''"
+            ds73_expr = "''"
+            sap_join = ""
+
+        # --- Final SQL (single query, joins conditional on availability) -------
+        sql = f"""
+            SELECT
+                ot."Order",
+                {notif_expr}          AS "Notification",
+                {pry_expr}            AS "Project Reporting Year",
+                {mat_expr}            AS "MAT Code",
+                {prog_expr}           AS "Program",
+                {subcat_expr}         AS "Sub-Category",
+                {div_expr}            AS "Div",
+                {region_expr}         AS "Region",
+                {wpd_expr}            AS "WPD",
+                {click_start_expr}    AS "CLICK Start Date",
+                {click_end_expr}      AS "CLICK End Date",
+                {notif_status_expr}   AS "Notification Status",
+                {sap_status_expr}     AS "SAP Status",
+                {order_user_expr}     AS "Order User Status",
+                {sp56_expr}           AS "SP56",
+                {rp56_expr}           AS "RP56",
+                {sp57_expr}           AS "SP57",
+                {rp57_expr}           AS "RP57",
+                {ds42_expr}           AS "DS42",
+                {pc20_expr}           AS "PC20",
+                {ds76_expr}           AS "DS76",
+                {pc24_expr}           AS "PC24",
+                {ds11_expr}           AS "DS11",
+                {pc21_expr}           AS "PC21",
+                {ap10_expr}           AS "AP10",
+                {ap25_expr}           AS "AP25",
+                {ds28_expr}           AS "DS28",
+                {ds73_expr}           AS "DS73",
+                {open_deps_expr}      AS "Open Dependencies",
+                {stage_expr}          AS "Stage of Job"
+            FROM order_tracking_list ot
+            {mpp_join}
+            {open_join}
+            {sap_join}
+            ORDER BY ot."Order"
+        """
 
         cur.execute(sql)
         rows = cur.fetchall()
