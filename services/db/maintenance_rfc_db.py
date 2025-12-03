@@ -7,7 +7,7 @@ from typing import Iterable, List, Tuple, Optional, Dict
 from datetime import datetime
 import pandas as pd
 from pathlib import Path
-from ledgers.tracker_conditions_ledger.maintenance import (
+from ledgers.tracker_conditions_ledger.maintenance_rfc import (
     ALLOWED_MAT,
     ALLOWED_YEARS,
     REQUIRED_PM_FLAG,

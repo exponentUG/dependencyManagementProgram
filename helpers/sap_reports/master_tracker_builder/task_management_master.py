@@ -10,7 +10,7 @@ from tkinter import ttk, filedialog
 import win32com.client
 import pyperclip
 
-from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db
+from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db, maintenance_rfc_db
 
 TASKS = [
     "SP56",
@@ -259,6 +259,7 @@ def run_multi_tm_export(parent: tk.Misc, initial_dest: Optional[str] = None) -> 
         ("Poles", poles_db),
         ("Poles RFC", poles_rfc_db),
         ("WMP", wmp_db),
+        ("Maintenance RFC", maintenance_rfc_db)
     ]
 
     file_name_map = {
@@ -266,6 +267,7 @@ def run_multi_tm_export(parent: tk.Misc, initial_dest: Optional[str] = None) -> 
         "Poles": f"Poles SAP Data - {today_str}.xlsx",
         "Poles RFC": f"Poles RFC SAP Data - {today_str}.xlsx",
         "WMP": f"WMP SAP Data - {today_str}.xlsx",
+        "Maintenance RFC": f"Maintenance RFC SAP Data - {today_str}.xlsx"
     }
 
     created_files: List[str] = []
