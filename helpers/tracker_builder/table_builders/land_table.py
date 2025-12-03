@@ -77,19 +77,39 @@ def get_land_table(db_path: str) -> Tuple[list[str], list[tuple]]:
         base_with_land = ""
         if has_land:
             # land_latest = latest row per Order based on Permit Created Date
+            # Convert MM/DD/YYYY -> YYYY-MM-DD and max on that, so "latest" is
+            # truly chronological, not just lexicographical.
             base_with_land = """
-                WITH land_latest AS (
-                    SELECT ld.*
+                WITH land_with_iso AS (
+                    SELECT
+                        ld.*,
+                        CASE
+                        WHEN "Permit Created Date" IS NOT NULL
+                            AND LENGTH("Permit Created Date") = 10
+                            AND SUBSTR("Permit Created Date", 3, 1) = '/'
+                            AND SUBSTR("Permit Created Date", 6, 1) = '/'
+                            THEN SUBSTR("Permit Created Date", 7, 4) || '-' ||
+                                SUBSTR("Permit Created Date", 1, 2) || '-' ||
+                                SUBSTR("Permit Created Date", 4, 2)
+                        ELSE NULL
+                        END AS permit_created_iso
                     FROM land_data ld
+                ),
+                land_latest AS (
+                    SELECT lwi.*
+                    FROM land_with_iso lwi
                     JOIN (
                         SELECT
                             "Order" AS ord,
-                            MAX(COALESCE("Permit Created Date", '')) AS max_pcd
-                        FROM land_data
+                            MAX(permit_created_iso) AS max_iso
+                        FROM land_with_iso
                         GROUP BY "Order"
                     ) mx
-                      ON mx.ord = ld."Order"
-                     AND COALESCE(ld."Permit Created Date", '') = mx.max_pcd
+                    ON mx.ord = lwi."Order"
+                    AND (
+                        (mx.max_iso IS NULL AND lwi.permit_created_iso IS NULL)
+                        OR lwi.permit_created_iso = mx.max_iso
+                    )
                 )
             """
 
