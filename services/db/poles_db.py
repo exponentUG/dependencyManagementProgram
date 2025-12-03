@@ -324,6 +324,13 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
 
     return df
 
+def get_order_tracking_df() -> pd.DataFrame:
+    ensure_db()
+    dbp = default_db_path()
+    with sqlite3.connect(dbp) as conn:
+        df = pd.read_sql_query('SELECT "Order" FROM order_tracking_list ORDER BY "Order" ASC', conn)
+    return df
+
 # ------------------------
 # Write mpp_data table
 # ------------------------
