@@ -154,7 +154,6 @@ def _to_iso_case_flex(col_expr: str) -> str:
     END
     """
 
-
 def build_land_tracker(conn: sqlite3.Connection) -> int:
     _ensure_table(conn)
     cur = conn.cursor()
@@ -484,7 +483,6 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
     conn.commit()
 
     # 12) Parsed anticipated issue date in the future -> no action required
-    #    (uses Parsed Anticipated Issue Date as a fallback trigger)
     parsed_anticip_iso = _to_iso_case_flex('NULLIF(TRIM(COALESCE("Parsed Anticipated Issue Date","")), "")')
 
     cur.execute(f"""
@@ -497,11 +495,17 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
 
     # 13) Under-review WPD-based rules (use __land_base.work_plan_date_iso)
     # Case 1: Parsed Action = "Under review.", SP57/RP57 = ACTD,
+    #         Anticipated Application Date blank,
     #         WPD in (today, today+90 days] -> ask for update
     cur.execute("""
         UPDATE land_tracker
         SET "Action" = 'Please provide update on land application. WPD in less than 3 months.'
         WHERE "Parsed Action" = 'Under review.'
+          AND (
+                "Anticipated Application Date" IS NULL
+             OR TRIM(COALESCE("Anticipated Application Date","")) = ''
+             OR TRIM(COALESCE("Anticipated Application Date","")) = '-'
+          )
           AND UPPER(TRIM(COALESCE("SP57",""))) = 'ACTD'
           AND UPPER(TRIM(COALESCE("RP57",""))) = 'ACTD'
           AND "Order" IN (
@@ -518,6 +522,11 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
         UPDATE land_tracker
         SET "Action" = 'Under review. No action required.'
         WHERE "Parsed Action" = 'Under review.'
+          AND (
+                "Anticipated Application Date" IS NULL
+             OR TRIM(COALESCE("Anticipated Application Date","")) = ''
+             OR TRIM(COALESCE("Anticipated Application Date","")) = '-'
+          )
           AND UPPER(TRIM(COALESCE("SP57",""))) = 'ACTD'
           AND UPPER(TRIM(COALESCE("RP57",""))) = 'ACTD'
           AND "Order" IN (
@@ -529,9 +538,57 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
     """, (today_iso,))
     conn.commit()
 
-    # 14) Permit-expired rule:
-    # If max(Permit Expiration Date, Parsed Permit Expiration Date) is in the past
-    # AND Notification Status = OPEN -> Permit expired action
+    # --- NEW: “Request has been reviewed and permit is required.” WPD-based rules ---
+
+    # Case 3: Parsed Action = reviewed+permit required, Anticipated App blank,
+    #         SP57 or RP57 = INPR, WPD in (today, today+90 days] -> ask for update
+    cur.execute("""
+        UPDATE land_tracker
+        SET "Action" = 'Please provide update on land application. WPD in less than 3 months.'
+        WHERE "Parsed Action" = 'Request has been reviewed and permit is required.'
+          AND (
+                "Anticipated Application Date" IS NULL
+             OR TRIM(COALESCE("Anticipated Application Date","")) = ''
+             OR TRIM(COALESCE("Anticipated Application Date","")) = '-'
+          )
+          AND (
+                UPPER(TRIM(COALESCE("SP57",""))) = 'INPR'
+             OR UPPER(TRIM(COALESCE("RP57",""))) = 'INPR'
+          )
+          AND "Order" IN (
+              SELECT b."Order"
+              FROM __land_base b
+              WHERE b.work_plan_date_iso IS NOT NULL
+                AND date(b.work_plan_date_iso) > date(?)
+                AND date(b.work_plan_date_iso) <= date(?, '+90 days')
+          );
+    """, (today_iso, today_iso))
+
+    # Case 4: same Parsed Action + Anticipated App blank + INPR,
+    #         but WPD > today+90 days -> no action required
+    cur.execute("""
+        UPDATE land_tracker
+        SET "Action" = 'Under review. No action required.'
+        WHERE "Parsed Action" = 'Request has been reviewed and permit is required.'
+          AND (
+                "Anticipated Application Date" IS NULL
+             OR TRIM(COALESCE("Anticipated Application Date","")) = ''
+             OR TRIM(COALESCE("Anticipated Application Date","")) = '-'
+          )
+          AND (
+                UPPER(TRIM(COALESCE("SP57",""))) = 'INPR'
+             OR UPPER(TRIM(COALESCE("RP57",""))) = 'INPR'
+          )
+          AND "Order" IN (
+              SELECT b."Order"
+              FROM __land_base b
+              WHERE b.work_plan_date_iso IS NOT NULL
+                AND date(b.work_plan_date_iso) > date(?, '+90 days')
+          );
+    """, (today_iso,))
+    conn.commit()
+
+    # 14) Permit-expired rule
     exp1_iso = _to_iso_case_flex('NULLIF(TRIM(COALESCE("Permit Expiration Date","")), "")')
     exp2_iso = _to_iso_case_flex('NULLIF(TRIM(COALESCE("Parsed Permit Expiration Date","")), "")')
 
@@ -551,3 +608,5 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
     conn.commit()
 
     return conn.total_changes - before
+
+

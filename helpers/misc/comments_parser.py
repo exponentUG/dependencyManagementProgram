@@ -9,6 +9,7 @@ PERMIT_OBTAINED_ACTION  = "Permit obtained."
 PERMIT_APPLIED_ACTION   = "Permit applied for."
 MONUMENT_DONE_ACTION    = "Monument survey complete."
 UNDER_REVIEW_ACTION     = "Under review."
+REVIEWED_PERMIT_REQ_ACTION = "Request has been reviewed and permit is required."
 
 # ============================================================
 # 1) NO-PERMIT (review complete) — robust pattern set
@@ -32,7 +33,11 @@ _POSITIVE_NO_PERMIT = [
     r"\bland\s+review\s+completed\b",
     r"\bcompleted\s+intake\b.*\bno\s+additional\s+land\s+rights\s+(required|needed)\b",
     r"\bno\s+caltrans\s+permit\s+(required|needed)\b",
-    r"\bno\s+permit\s+needed\b.*\bannual\b",
+
+    # Generic "no permit needed."
+    r"\bno\s+permit\s+needed\b",
+    r"\bno\s+permit\s+is\s+needed\b",
+
     r"\bfacilities\s+located\s+outside\s+of\s+caltrans\s+right[-\s]?of[-\s]?way\b.*\bno\s+caltrans\s+permit\s+required\b",
     r"\bno\s+land\s+needed\b",
     r"\bno\s*ct\s*(?:/|or)\s*rr\s+permit\s+required\b",
@@ -54,6 +59,10 @@ _POSITIVE_NO_PERMIT = [
 
     # Generic "no permit required."
     r"\bno\s+permit\s+required\b",
+
+    # Railroad-specific no-permit statements
+    r"\bno\s+railroad\s+permit\s+(?:is\s+)?needed\b",
+    r"\bno\s+railroad\s+permit\s+(?:is\s+)?required\b",
 
     # "Land rights secured per LD..., no additional Land needed"
     r"\bno\s+additional\s+land\s+needed\b",
@@ -103,6 +112,58 @@ def _matches_under_review(text: str) -> bool:
     for rx in _under_review_re:
         if rx.search(t):
             return True
+    return False
+
+# ============================================================
+# 1c) REVIEWED & PERMIT REQUIRED — targeted patterns
+# ============================================================
+
+# Core "permit is required/needed" phrase (also catches "permit require")
+_PERMIT_REQUIRED_RE = re.compile(
+    r"\bpermit\s+require(?:d)?\b|\bpermit\s+needed\b",
+    re.IGNORECASE,
+)
+
+# Context words that indicate land/Caltrans/Railroad style comments
+_REVIEW_CONTEXT_RE = re.compile(
+    r"\b(?:land\s+request|land\s+permitting\s+request|land\s+permitting|caltrans|railroad)\b",
+    re.IGNORECASE,
+)
+
+
+def _matches_reviewed_permit_required(text: str) -> bool:
+    """
+    True when the comment clearly indicates the land request has been
+    reviewed/received AND some permit is required/needed.
+
+    Examples that should match:
+      - "Land Request Reviewed. Caltrans Site-Specific Permit Required. ..."
+      - "Land Permitting Request Received. Caltrans High Risk. Caltrans Site Specific Permit Required. ..."
+      - "Land request reviewed. Railroad permit required. ..."
+      - "Railroad: High risk. Railroad permit required. ..."
+    """
+    t = text or ""
+    if not t:
+        return False
+
+    # Do NOT classify as "permit required" bucket if we already think it's "no permit needed".
+    # (This protects things like "no permit required".)
+    if _matches_no_permit(t):
+        return False
+
+    # Must have "permit required / needed / require"
+    if not _PERMIT_REQUIRED_RE.search(t):
+        return False
+
+    # Require some land / Caltrans / railroad context
+    if _REVIEW_CONTEXT_RE.search(t):
+        return True
+
+    # Fallback: if they explicitly say "Land Request Reviewed" or "Land request reviewed"
+    # plus any "permit required/needed" text, treat as reviewed & permit required.
+    if re.search(r"\bland\s+request\s+reviewed\b", t, re.IGNORECASE):
+        return True
+
     return False
 
 # ============================================================
@@ -232,12 +293,13 @@ def parse_comment_semantics(latest_comment: str) -> Tuple[str, str, str]:
     Output: (Parsed Action, Parsed Anticipated Issue Date, Parsed Permit Expiration Date)
 
     Bucket priority:
-      1) Permit obtained.              -> ("Permit obtained.", "-", expiry_or "-")
-      2) Permit applied for.           -> ("Permit applied for.", anticipated_or "-", "-")
-      3) Under review.                 -> ("Under review.", "-", "-")
-      4) Review complete (no permit).  -> ("Review complete. No permit needed.", "-", "-")
-      5) Monument survey complete.     -> ("Monument survey complete.", "-", "-")
-      6) Fallback                      -> ("check", "-", "-")
+      1) Permit obtained.                               -> ("Permit obtained.", "-", expiry_or "-")
+      2) Permit applied for.                            -> ("Permit applied for.", anticipated_or "-", "-")
+      3) Request reviewed & permit required.            -> ("Request has been reviewed and permit is required.", "-", "-")
+      4) Under review.                                  -> ("Under review.", "-", "-")
+      5) Review complete (no permit).                   -> ("Review complete. No permit needed.", "-", "-")
+      6) Monument survey complete.                      -> ("Monument survey complete.", "-", "-")
+      7) Fallback                                       -> ("check", "-", "-")
     """
     txt = latest_comment or ""
 
@@ -251,17 +313,21 @@ def parse_comment_semantics(latest_comment: str) -> Tuple[str, str, str]:
         antic = _extract_anticipated(txt) or "-"
         return (PERMIT_APPLIED_ACTION, antic, "-")
 
-    # 3) Under review
+    # 3) Request has been reviewed and permit is required
+    if _matches_reviewed_permit_required(txt):
+        return (REVIEWED_PERMIT_REQ_ACTION, "-", "-")
+
+    # 4) Under review
     if _matches_under_review(txt):
         return (UNDER_REVIEW_ACTION, "-", "-")
 
-    # 4) Review complete / No permit needed
+    # 5) Review complete / No permit needed
     if _matches_no_permit(txt):
         return (NO_PERMIT_ACTION, "-", "-")
 
-    # 5) Monument survey complete
+    # 6) Monument survey complete
     if _matches_monument_done(txt):
         return (MONUMENT_DONE_ACTION, "-", "-")
 
-    # 6) Default
+    # 7) Default
     return ("check", "-", "-")
