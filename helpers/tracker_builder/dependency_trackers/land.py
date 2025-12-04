@@ -239,7 +239,7 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
             COALESCE(c.anticipated_issue_raw, '')      AS anticipated_issue_date,
             {_to_iso_case('c.anticipated_issue_raw')}  AS anticipated_issue_iso,
             COALESCE(c.permit_expiration_raw, '')      AS permit_expiration_date,
-            {_to_iso_case('c.permit_expiration_raw')}  AS permit_expiration_iso,
+            {_to_iso_case_flex('c.permit_expiration_raw')}  AS permit_expiration_iso,
             c.land_mgmt_comments,
             c.permit_comment
         FROM chosen c;
@@ -381,7 +381,7 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
                 WHEN b.permit_status = 'No permit required.'
                     THEN 'Please confirm no permit is required and complete SP/RP57.'
 
-                WHEN b.permit_status = 'Permit obtained.'
+                WHEN UPPER(TRIM(COALESCE(b.permit_status,''))) LIKE 'PERMIT OBTAINED%'
                     AND b.permit_expiration_iso IS NOT NULL
                     AND date(b.permit_expiration_iso) >= date(?)
                     THEN 'Please confirm permit is obtained and complete SP/RP57.'

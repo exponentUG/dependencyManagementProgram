@@ -170,17 +170,31 @@ def _matches_reviewed_permit_required(text: str) -> bool:
 # 2) PERMIT OBTAINED — with optional expiry extraction
 # ============================================================
 
-_OBTAINED_RE = re.compile(
-    r"\b(permit|cal\s*trans\s*permit|caltrans\s*permit|railroad\s*permit|rider/extension)\s+obtained\b",
-    re.IGNORECASE,
-)
+# Patterns that indicate the permit has been obtained/received
+_OBTAINED_PATTERNS = [
+    # simple "Permit obtained"
+    r"\b(permit|cal\s*trans\s*permit|caltrans\s*permit|railroad\s*permit|site[-\s]*specific\s+permit|rider/extension)\s+obtained\b",
 
+    # "Land has obtained the Caltrans Site Specific Permit"
+    r"\bobtained\b.*\b(permit|cal\s*trans\s*permit|caltrans\s*permit|railroad\s*permit|site[-\s]*specific\s+permit)\b",
+
+    # "Caltrans permit received" / "permit received"
+    r"\b(permit|cal\s*trans\s*permit|caltrans\s*permit|railroad\s*permit|site[-\s]*specific\s+permit)\s+received\b",
+    r"\breceived\b.*\b(permit|cal\s*trans\s*permit|caltrans\s*permit|railroad\s*permit|site[-\s]*specific\s+permit)\b",
+]
+
+_OBTAINED_RE = re.compile("|".join(_OBTAINED_PATTERNS), re.IGNORECASE | re.DOTALL)
+
+# Expiration formats:
+#   - "Expiration Date:01/31/2026"
+#   - "Expiration date: 5/1/2026"
+#   - "expires 3/10/2026"
+#   - "exp 06/01/26"
 _EXPIRES_RE = re.compile(
-    r"\b(expires?|expiration)\b\s*[:\-]?\s*"
+    r"\b(expires?|expiration(?:\s+date)?|exp\.?)\b\s*[:\-]?\s*"
     r"(?P<m>\d{1,2})[/-](?P<d>\d{1,2})[/-](?P<y>\d{2,4})",
     re.IGNORECASE,
 )
-
 
 def _yyyy_from_two(yy: int) -> int:
     return 2000 + yy
