@@ -13,7 +13,14 @@ from helpers.wmp_tracker_builder.logic import today_strings
 
 from core.base import ToolView, FONT_H1, FONT_H2  # FONT_H1 may be unused but is fine
 
-from services.db import wmp_db, maintenance_db, poles_db, poles_rfc_db, maintenance_rfc_db
+from services.db import (
+    wmp_db,
+    maintenance_db,
+    poles_db,
+    poles_rfc_db,
+    maintenance_rfc_db,
+    dependency_report_db,   # <- add this
+)
 
 from helpers.sap_reports.master_tracker_builder.task_management_master import (
     run_multi_tm_export,
@@ -31,6 +38,7 @@ from helpers.tracker_builder.table_builders.permit_table import get_permit_table
 from helpers.tracker_builder.table_builders.land_table import get_land_table
 from helpers.tracker_builder.table_builders.faa_table import get_faa_table
 from helpers.tracker_builder.table_builders.master_table import get_master_table
+
 
 TRACKER_MODES = [
     "Master",
@@ -331,6 +339,13 @@ class MASTER_TRACKER_BUILDER(ToolView):
         )
         self.btn_export_excel.grid(row=0, column=1, padx=(0, 8))
 
+        self.btn_add_to_report = ttk.Button(
+            left_fr,
+            text="Add to Report",
+            command=self._on_add_to_report,
+        )
+        self.btn_add_to_report.grid(row=0, column=2, padx=(0, 8))
+
         # Right group: Database + Tracker dropdowns
         right_fr = ttk.Frame(fr_tools)
         right_fr.grid(row=0, column=2, sticky="e")
@@ -404,6 +419,135 @@ class MASTER_TRACKER_BUILDER(ToolView):
     # ------------------------------------------------------------------
     # Table helpers (shared tracker view across all DBs)
     # ------------------------------------------------------------------
+    def _on_add_to_report(self) -> None:
+        """
+        Take a snapshot of row counts in each tracker table for each program DB
+        and append them into data/dependency_report.sqlite3, table order_count.
+
+        Columns recorded per row:
+          Database Type, Permit, Land, Environment,
+          Joint Pole, FAA, MiscTSK, Added On
+        """
+        import os
+        from datetime import datetime
+
+        trackers = [
+            ("WMP",           wmp_db),
+            ("Maintenance",   maintenance_db),
+            ("Maintenance RFC", maintenance_rfc_db),
+            ("Poles",         poles_db),
+            ("Poles RFC",     poles_rfc_db),
+        ]
+
+        busy = BusyPopup(self, title="Adding snapshot to dependency report")
+        if getattr(self, "btn_add_to_report", None) is not None:
+            self.btn_add_to_report.configure(state="disabled")
+        self.configure(cursor="watch")
+        self.update_idletasks()
+
+        def worker() -> None:
+            rows_for_report: list[dict] = []
+            errors: list[str] = []
+
+            for label, db_mod in trackers:
+                db_path = db_mod.default_db_path()
+                if not os.path.isfile(db_path):
+                    errors.append(
+                        f"- {label}: Database not found:\n  {db_path}\n  "
+                        "Run 'Extract Data' and 'Update Trackers' first."
+                    )
+                    continue
+
+                try:
+                    with sqlite3.connect(db_path) as conn:
+                        cur = conn.cursor()
+
+                        def _count(table_name: str) -> int:
+                            cur.execute(f'SELECT COUNT(*) FROM "{table_name}"')
+                            val = cur.fetchone()
+                            return int(val[0]) if val and val[0] is not None else 0
+
+                        permit       = _count("permit_tracker")
+                        land         = _count("land_tracker")
+                        environment  = _count("environment_tracker")
+                        joint_pole   = _count("joint_pole_tracker")
+                        faa          = _count("faa_tracker")
+                        misctsk      = _count("miscTSK_tracker")
+
+                    added_on = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    rows_for_report.append(
+                        {
+                            "Database Type": label,
+                            "Permit": permit,
+                            "Land": land,
+                            "Environment": environment,
+                            "Joint Pole": joint_pole,
+                            "FAA": faa,
+                            "MiscTSK": misctsk,
+                            "Added On": added_on,
+                        }
+                    )
+                except Exception as e:
+                    errors.append(f"- {label}: {type(e).__name__}: {e}")
+
+            # Write to dependency_report.sqlite3
+            if rows_for_report:
+                try:
+                    dependency_report_db.insert_order_counts(rows_for_report)
+                except Exception as e:
+                    errors.append(
+                        f"- Dependency report DB: {type(e).__name__}: {e}"
+                    )
+
+            def done() -> None:
+                busy.finish()
+                if getattr(self, "btn_add_to_report", None) is not None:
+                    self.btn_add_to_report.configure(state="normal")
+                self.configure(cursor="")
+
+                if not rows_for_report and errors:
+                    # Nothing inserted
+                    messagebox.showerror(
+                        "Add to Report Failed",
+                        "No rows were added to the dependency report.\n\n"
+                        + "\n".join(errors),
+                    )
+                    return
+
+                # Build summary of what we added
+                summary_lines: list[str] = []
+                if rows_for_report:
+                    summary_lines.append(
+                        "Snapshot added to data/dependency_report.sqlite3 (order_count):"
+                    )
+                    summary_lines.append("")
+                    for r in rows_for_report:
+                        summary_lines.append(
+                            f"• {r['Database Type']}: "
+                            f"Permit={r['Permit']}, Land={r['Land']}, "
+                            f"Environment={r['Environment']}, "
+                            f"Joint Pole={r['Joint Pole']}, FAA={r['FAA']}, "
+                            f"MiscTSK={r['MiscTSK']} (Added On {r['Added On']})"
+                        )
+
+                if errors:
+                    summary_lines.append("")
+                    summary_lines.append("Some issues occurred:")
+                    summary_lines.extend(errors)
+                    messagebox.showwarning(
+                        "Add to Report Complete (partial)",
+                        "\n".join(summary_lines),
+                    )
+                else:
+                    messagebox.showinfo(
+                        "Add to Report Complete", "\n".join(summary_lines)
+                    )
+
+            self.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _on_export_excel(self) -> None:
         """
         Export all tracker views (7 sheets) for ALL four programs
