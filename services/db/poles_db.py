@@ -83,7 +83,7 @@ MPP_SCHEMA: Dict[str, str] = {
     "WMP Commitments": "TEXT",
     "PEND In": "TEXT",
     "Shovel Ready Date": "TEXT",
-    "LEAPs Combined Exp Out Date": "TEXT",
+    "LEAPS Combined Exp Out Date": "TEXT",
     "Est Out Date": "TEXT",
     "Completion Deadline Date": "TEXT",
 }
@@ -231,7 +231,7 @@ _DATE_COLS = {
     "CLICK End Date",
     # --- NEW date-like columns ---
     "Shovel Ready Date",
-    "LEAPs Combined Exp Out Date",
+    "LEAPS Combined Exp Out Date",
     "Est Out Date",
     "Completion Deadline Date",
 }
@@ -286,7 +286,7 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         "WMP Commitments",
         "PEND In",
         "Shovel Ready Date",
-        "LEAPs Combined Exp Out Date",
+        "LEAPS Combined Exp Out Date",
         "Est Out Date",
         "Completion Deadline Date",
     ]
