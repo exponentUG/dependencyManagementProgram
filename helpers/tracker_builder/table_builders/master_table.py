@@ -10,14 +10,21 @@ COLUMNS: List[str] = [
     "MAT Code",
     "Program",
     "Sub-Category",
+    "WMP Commitments",
+    "Priority",
     "Div",
     "Region",
     "WPD",
+    "Est Req",
+    "Shovel Ready Date",
+    "Resource",
     "CLICK Start Date",
     "CLICK End Date",
     "Notification Status",
     "SAP Status",
-    "Order User Status",     # <-- NEW COLUMN
+    "Order User Status",
+    "Open Dependencies",
+    "Stage of Job",
     "SP56",
     "RP56",
     "SP57",
@@ -32,8 +39,10 @@ COLUMNS: List[str] = [
     "AP25",
     "DS28",
     "DS73",
-    "Open Dependencies",
-    "Stage of Job",
+    "Est Out Date",
+    "PEND In",
+    "LEAPS Combined Expected Out Date",
+    "Completion Deadline Date",
 ]
 
 
@@ -82,14 +91,24 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             mat_expr = 'COALESCE(m."MAT", \'\')'
             prog_expr = 'COALESCE(m."Program", \'\')'
             subcat_expr = 'COALESCE(m."Sub-Category", \'\')'
+            wmp_commit_expr = 'COALESCE(m."WMP Commitments", \'\')'
+            priority_expr = 'COALESCE(m."Priority", \'\')'
             div_expr = 'COALESCE(m."Div", \'\')'
             region_expr = 'COALESCE(m."Region", \'\')'
             wpd_expr = 'COALESCE(m."Work Plan Date", \'\')'
+            est_req_expr = 'COALESCE(m."Est Req", \'\')'
+            shovel_expr = 'COALESCE(m."Shovel Ready Date", \'\')'
+            resource_expr = 'COALESCE(m."Resource", \'\')'
             click_start_expr = 'COALESCE(m."CLICK Start Date", \'\')'
             click_end_expr = 'COALESCE(m."CLICK End Date", \'\')'
             notif_status_expr = 'COALESCE(m."Notif Status", \'\')'
             sap_status_expr = 'COALESCE(m."Primary Status", \'\')'
-            order_user_expr = 'COALESCE(m."Order User Status", \'\')'  # NEW
+            order_user_expr = 'COALESCE(m."Order User Status", \'\')'
+            est_out_expr = 'COALESCE(m."Est Out Date", \'\')'
+            pend_in_expr = 'COALESCE(m."PEND In", \'\')'
+            leaps_expr = 'COALESCE(m."LEAPs Combined Exp Out Date", \'\')'
+            compl_deadline_expr = 'COALESCE(m."Completion Deadline Date", \'\')'
+
             mpp_join = 'LEFT JOIN mpp_data m           ON m."Order" = ot."Order"'
         else:
             notif_expr = "''"
@@ -97,14 +116,24 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
             mat_expr = "''"
             prog_expr = "''"
             subcat_expr = "''"
+            wmp_commit_expr = "''"
+            priority_expr = "''"
             div_expr = "''"
             region_expr = "''"
             wpd_expr = "''"
+            est_req_expr = "''"
+            shovel_expr = "''"
+            resource_expr = "''"
             click_start_expr = "''"
             click_end_expr = "''"
             notif_status_expr = "''"
             sap_status_expr = "''"
-            order_user_expr = "''"  # NEW
+            order_user_expr = "''"
+            est_out_expr = "''"
+            pend_in_expr = "''"
+            leaps_expr = "''"
+            compl_deadline_expr = "''"
+
             mpp_join = ""
 
         # open_dependencies fields
@@ -163,14 +192,21 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                 {mat_expr}            AS "MAT Code",
                 {prog_expr}           AS "Program",
                 {subcat_expr}         AS "Sub-Category",
+                {wmp_commit_expr}     AS "WMP Commitments",
+                {priority_expr}       AS "Priority",
                 {div_expr}            AS "Div",
                 {region_expr}         AS "Region",
                 {wpd_expr}            AS "WPD",
+                {est_req_expr}        AS "Est Req",
+                {shovel_expr}         AS "Shovel Ready Date",
+                {resource_expr}       AS "Resource",
                 {click_start_expr}    AS "CLICK Start Date",
                 {click_end_expr}      AS "CLICK End Date",
                 {notif_status_expr}   AS "Notification Status",
                 {sap_status_expr}     AS "SAP Status",
                 {order_user_expr}     AS "Order User Status",
+                {open_deps_expr}      AS "Open Dependencies",
+                {stage_expr}          AS "Stage of Job",
                 {sp56_expr}           AS "SP56",
                 {rp56_expr}           AS "RP56",
                 {sp57_expr}           AS "SP57",
@@ -185,8 +221,10 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                 {ap25_expr}           AS "AP25",
                 {ds28_expr}           AS "DS28",
                 {ds73_expr}           AS "DS73",
-                {open_deps_expr}      AS "Open Dependencies",
-                {stage_expr}          AS "Stage of Job"
+                {est_out_expr}        AS "Est Out Date",
+                {pend_in_expr}        AS "PEND In",
+                {leaps_expr}          AS "LEAPS Combined Expected Out Date",
+                {compl_deadline_expr} AS "Completion Deadline Date"
             FROM order_tracking_list ot
             {mpp_join}
             {open_join}
