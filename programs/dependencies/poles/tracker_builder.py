@@ -14,6 +14,7 @@ from ledgers.tracker_conditions_ledger.poles import ALLOWED_MAT, ALLOWED_SAP_STA
 from helpers.tracker_builder.pull_sap_data import pull_sap_data
 from helpers.tracker_builder.pull_epw_data import pull_epw_data
 from helpers.tracker_builder.pull_land_data import pull_land_data
+from helpers.tracker_builder.pull_joint_pole_data import pull_joint_pole_data
 from helpers.tracker_builder.update_trackers import build_sap_tracker_initial
 from helpers.tracker_builder.manual_inputs import save_pasted_pairs, save_from_tracker_excel
 
@@ -76,14 +77,15 @@ class Poles_Tracker_Builder(ToolView):
         self.path_var.trace_add("write", lambda *_: self._update_generate_state())
 
         # ---- Row 5: Step 2 label
-        ttk.Label(self, text="Step 2: Update SAP Data, EPW Data, and Land Data").grid(
+        ttk.Label(self, text="Step 2: Update SAP Data, EPW Data, Land Data, and Joint Pole Data").grid(
             row=5, column=0, columnspan=6, sticky="w", padx=16, pady=(16, 2)
         )
 
-        # ---- Rows 6–8: pickers (full-width like row 4)
-        self.var_sap = tk.StringVar();  self.var_sap.trace_add("write", lambda *_: self._update_step2_state())
-        self.var_epw = tk.StringVar();  self.var_epw.trace_add("write", lambda *_: self._update_step2_state())
-        self.var_land = tk.StringVar(); self.var_land.trace_add("write", lambda *_: self._update_step2_state())
+        # ---- Rows 6–9: pickers (full-width like row 4)
+        self.var_sap = tk.StringVar();   self.var_sap.trace_add("write", lambda *_: self._update_step2_state())
+        self.var_epw = tk.StringVar();   self.var_epw.trace_add("write", lambda *_: self._update_step2_state())
+        self.var_land = tk.StringVar();  self.var_land.trace_add("write", lambda *_: self._update_step2_state())
+        self.var_joint = tk.StringVar(); self.var_joint.trace_add("write", lambda *_: self._update_step2_state())
 
         # --- Row 6 (SAP) custom so we can add Extract SAP Data button ---
         fr6 = ttk.Frame(self)
@@ -99,7 +101,7 @@ class Poles_Tracker_Builder(ToolView):
             row=0, column=3, sticky="w"
         )
 
-        # --- helper for rows 7–8 ---
+        # --- helper for rows 7–9 ---
         def make_row(r: int, label: str, var: tk.StringVar):
             fr = ttk.Frame(self)
             fr.grid(row=r, column=0, columnspan=6, sticky="ew", padx=16, pady=4)
@@ -110,23 +112,24 @@ class Poles_Tracker_Builder(ToolView):
                 row=0, column=2, sticky="w"
             )
 
-        make_row(7, "EPW Data",  self.var_epw)
-        make_row(8, "Land Data", self.var_land)
+        make_row(7, "EPW Data",        self.var_epw)
+        make_row(8, "Land Data",       self.var_land)
+        make_row(9, "Joint Pole Data", self.var_joint)
 
-        # ---- Row 9: Extract Data (left aligned)
+        # ---- Row 10: Extract Data (left aligned)
         fr_btn = ttk.Frame(self)
-        fr_btn.grid(row=9, column=0, columnspan=6, sticky="w", padx=16, pady=(4, 6))
+        fr_btn.grid(row=10, column=0, columnspan=6, sticky="w", padx=16, pady=(4, 6))
         self.btn_extract = ttk.Button(fr_btn, text="Extract Data", command=self._on_extract_step2, state="disabled")
         self.btn_extract.grid(row=0, column=0)
 
-        # ---- Row 10: Tracker Tools heading
+        # ---- Row 11: Tracker Tools heading
         ttk.Label(self, text="Tracker Tools", font=FONT_H1).grid(
-            row=10, column=0, columnspan=6, sticky="w", padx=16, pady=(8, 4)
+            row=11, column=0, columnspan=6, sticky="w", padx=16, pady=(8, 4)
         )
 
-        # ---- Row 11: Tools (left) + Mode dropdown + Refresh (right)
+        # ---- Row 12: Tools (left) + Mode dropdown + Refresh (right)
         fr_tools = ttk.Frame(self)
-        fr_tools.grid(row=11, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6))
+        fr_tools.grid(row=12, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6))
         fr_tools.columnconfigure(0, weight=0)  # left buttons
         fr_tools.columnconfigure(1, weight=1)  # spacer
         fr_tools.columnconfigure(2, weight=0)  # right controls
@@ -156,15 +159,15 @@ class Poles_Tracker_Builder(ToolView):
         self.btn_refresh_table = ttk.Button(right_fr, text="Refresh", command=self._refresh_table)
         self.btn_refresh_table.grid(row=0, column=2, sticky="e")
 
-        # ---- Row 12: Order Count (between tools and table)
+        # ---- Row 13: Order Count (between tools and table)
         fr_count = ttk.Frame(self)
-        fr_count.grid(row=12, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6))
+        fr_count.grid(row=13, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6))
         self.count_var = tk.StringVar(value="Order Count: —")
         ttk.Label(fr_count, textvariable=self.count_var).grid(row=0, column=0, sticky="w")
 
-        # ---- Row 13: Table (Treeview) with vertical + horizontal scrollbars
+        # ---- Row 14: Table (Treeview) with vertical + horizontal scrollbars
         lf = ttk.LabelFrame(self, text="Tracker View")
-        lf.grid(row=13, column=0, columnspan=6, sticky="nsew", padx=16, pady=(0, 12))
+        lf.grid(row=14, column=0, columnspan=6, sticky="nsew", padx=16, pady=(0, 12))
 
         self.tree = ttk.Treeview(lf, columns=("message",), show="headings", height=16)
         self.tree.heading("message", text="Message")
@@ -181,7 +184,7 @@ class Poles_Tracker_Builder(ToolView):
         lf.columnconfigure(0, weight=1)
 
         # Let the table area grow
-        self.rowconfigure(13, weight=1)
+        self.rowconfigure(14, weight=1)
         self.columnconfigure(0, weight=1)
 
         # initial load
@@ -409,14 +412,21 @@ class Poles_Tracker_Builder(ToolView):
             var.set(path)
 
     def _update_step2_state(self):
-        all_three = all(os.path.isfile(x.strip()) for x in (self.var_sap.get(), self.var_epw.get(), self.var_land.get()))
-        self.btn_extract.configure(state=("normal" if all_three else "disabled"))
+        files = (
+            self.var_sap.get(),
+            self.var_epw.get(),
+            self.var_land.get(),
+            self.var_joint.get(),
+        )
+        all_ok = all(os.path.isfile(x.strip()) for x in files)
+        self.btn_extract.configure(state=("normal" if all_ok else "disabled"))
 
     def _on_extract_step2(self):
         paths = {
-            "SAP": self.var_sap.get().strip(),
-            "EPW": self.var_epw.get().strip(),
-            "LAND": self.var_land.get().strip(),
+            "SAP":   self.var_sap.get().strip(),
+            "EPW":   self.var_epw.get().strip(),
+            "LAND":  self.var_land.get().strip(),
+            "JOINT": self.var_joint.get().strip(),
         }
         missing = [k for k, p in paths.items() if not p or not os.path.isfile(p)]
         if missing:
@@ -426,7 +436,7 @@ class Poles_Tracker_Builder(ToolView):
         db_path = default_db_path()
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-        # --- NEW: Busy popup + background thread (same pattern as Update Trackers) ---
+        # Busy popup + background thread (same pattern as Update Trackers)
         busy = BusyPopup(self, title="Extracting Data")
         self.btn_extract.configure(state="disabled")
         self.configure(cursor="watch")
@@ -438,6 +448,7 @@ class Poles_Tracker_Builder(ToolView):
                 tbl, n = pull_sap_data(db_path, paths["SAP"]);   msgs.append(f"- {tbl}: {n:,} rows")
                 tbl, n = pull_epw_data(db_path, paths["EPW"], ALLOWED_MAT, True, True, ALLOWED_SAP_STATUS);   msgs.append(f"- {tbl}: {n:,} rows")
                 tbl, n = pull_land_data(db_path, paths["LAND"], ALLOWED_MAT, True, True, ALLOWED_SAP_STATUS); msgs.append(f"- {tbl}: {n:,} rows")
+                tbl, n = pull_joint_pole_data(db_path, paths["JOINT"], ALLOWED_MAT);                          msgs.append(f"- {tbl}: {n:,} rows")
 
                 # Ensure indexes after loading source tables
                 self._ensure_perf_indexes(db_path)
