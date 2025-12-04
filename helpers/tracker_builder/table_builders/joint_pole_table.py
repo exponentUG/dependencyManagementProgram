@@ -1,4 +1,3 @@
-# helpers/wmp_tracker_builder/table_builders/joint_pole_table.py
 from __future__ import annotations
 import sqlite3
 from typing import List, Tuple
@@ -17,12 +16,13 @@ COLUMNS: List[str] = [
     "CLICK End Date",
     "Notification Status",
     "SAP Status",
-    "Order User Status",      # <-- NEW COLUMN (from mpp_data)
-    "Open Dependencies",      # <-- NEW COLUMN (from open_dependencies)
+    "Order User Status",      # from mpp_data
+    "Open Dependencies",      # from open_dependencies
     "DS42",
     "PC20",
-    "Sent to OU Date",
-    "Anticipated Out Date",
+    "Primary Intent Status",
+    "Status Date",
+    "Due By",
     "Joint Pole Notes",
     "Action",
 ]
@@ -76,8 +76,9 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                     COALESCE(od."Open Dependencies", '')          AS "Open Dependencies",
                     COALESCE(jt."DS42", '')                       AS "DS42",
                     COALESCE(jt."PC20", '')                       AS "PC20",
-                    jt."Sent to OU Date"                          AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    jt."Primary Intent Status"                    AS "Primary Intent Status",
+                    jt."Status Date"                              AS "Status Date",
+                    jt."Due By"                                   AS "Due By",
                     COALESCE(mt."Joint Pole Notes", '')           AS "Joint Pole Notes",
                     COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
@@ -109,8 +110,9 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                     ''                                            AS "Open Dependencies",
                     COALESCE(jt."DS42", '')                       AS "DS42",
                     COALESCE(jt."PC20", '')                       AS "PC20",
-                    jt."Sent to OU Date"                          AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    jt."Primary Intent Status"                    AS "Primary Intent Status",
+                    jt."Status Date"                              AS "Status Date",
+                    jt."Due By"                                   AS "Due By",
                     COALESCE(mt."Joint Pole Notes", '')           AS "Joint Pole Notes",
                     COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
@@ -140,8 +142,9 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                     COALESCE(od."Open Dependencies", '')          AS "Open Dependencies",
                     COALESCE(jt."DS42", '')                       AS "DS42",
                     COALESCE(jt."PC20", '')                       AS "PC20",
-                    jt."Sent to OU Date"                          AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    jt."Primary Intent Status"                    AS "Primary Intent Status",
+                    jt."Status Date"                              AS "Status Date",
+                    jt."Due By"                                   AS "Due By",
                     ''                                            AS "Joint Pole Notes",
                     COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
@@ -171,8 +174,9 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                     ''                                            AS "Open Dependencies",
                     COALESCE(jt."DS42", '')                       AS "DS42",
                     COALESCE(jt."PC20", '')                       AS "PC20",
-                    jt."Sent to OU Date"                          AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    jt."Primary Intent Status"                    AS "Primary Intent Status",
+                    jt."Status Date"                              AS "Status Date",
+                    jt."Due By"                                   AS "Due By",
                     ''                                            AS "Joint Pole Notes",
                     COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
@@ -200,8 +204,9 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                     COALESCE(od."Open Dependencies", '')          AS "Open Dependencies",
                     COALESCE(jt."DS42", '')                       AS "DS42",
                     COALESCE(jt."PC20", '')                       AS "PC20",
-                    jt."Sent to OU Date"                          AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    jt."Primary Intent Status"                    AS "Primary Intent Status",
+                    jt."Status Date"                              AS "Status Date",
+                    jt."Due By"                                   AS "Due By",
                     COALESCE(mt."Joint Pole Notes", '')           AS "Joint Pole Notes",
                     COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
@@ -231,8 +236,9 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                     ''                                            AS "Open Dependencies",
                     COALESCE(jt."DS42", '')                       AS "DS42",
                     COALESCE(jt."PC20", '')                       AS "PC20",
-                    jt."Sent to OU Date"                          AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    jt."Primary Intent Status"                    AS "Primary Intent Status",
+                    jt."Status Date"                              AS "Status Date",
+                    jt."Due By"                                   AS "Due By",
                     COALESCE(mt."Joint Pole Notes", '')           AS "Joint Pole Notes",
                     COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
@@ -260,8 +266,9 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                     COALESCE(od."Open Dependencies", '')          AS "Open Dependencies",
                     COALESCE(jt."DS42", '')                       AS "DS42",
                     COALESCE(jt."PC20", '')                       AS "PC20",
-                    jt."Sent to OU Date"                          AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    jt."Primary Intent Status"                    AS "Primary Intent Status",
+                    jt."Status Date"                              AS "Status Date",
+                    jt."Due By"                                   AS "Due By",
                     ''                                            AS "Joint Pole Notes",
                     COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
@@ -290,8 +297,9 @@ def get_joint_pole_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                     ''                                            AS "Open Dependencies",
                     COALESCE(jt."DS42", '')                       AS "DS42",
                     COALESCE(jt."PC20", '')                       AS "PC20",
-                    jt."Sent to OU Date"                          AS "Sent to OU Date",
-                    jt."Anticipated Out Date"                     AS "Anticipated Out Date",
+                    jt."Primary Intent Status"                    AS "Primary Intent Status",
+                    jt."Status Date"                              AS "Status Date",
+                    jt."Due By"                                   AS "Due By",
                     ''                                            AS "Joint Pole Notes",
                     COALESCE(jt."Action", '')                     AS "Action"
                 FROM joint_pole_tracker jt
