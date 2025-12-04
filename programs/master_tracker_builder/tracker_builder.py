@@ -29,6 +29,7 @@ from helpers.tracker_builder.pull_sap_data import pull_sap_data
 from helpers.tracker_builder.pull_epw_data import pull_epw_data
 from helpers.tracker_builder.pull_land_data import pull_land_data
 from helpers.tracker_builder.update_trackers import build_sap_tracker_initial
+from helpers.tracker_builder.pull_joint_pole_data import pull_joint_pole_data
 
 # table builders (shared across programs)
 from helpers.tracker_builder.table_builders.environment_table import get_environment_table
@@ -143,6 +144,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
         self.var_epw = tk.StringVar()
         self.var_land = tk.StringVar()
+        self.var_joint = tk.StringVar()   # <-- NEW
 
         # Attach change listeners so we can enable/disable "Extract Data"
         for v in (
@@ -154,6 +156,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
             self.var_sap_wmp,
             self.var_epw,
             self.var_land,
+            self.var_joint,   # <-- NEW
         ):
             v.trace_add("write", lambda *_: self._update_step2_state())
 
@@ -286,17 +289,19 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
         _make_row(13, "EPW Data", self.var_epw)
         _make_row(14, "Land Data", self.var_land)
+        _make_row(15, "Joint Pole Data", self.var_joint)  # <-- NEW ROW
 
-        # ---- Row 15: Extract Data button ----
+        # ---- Row 16: Extract Data button ----
         fr_btn = ttk.Frame(self)
         fr_btn.grid(
-            row=15,
+            row=16,
             column=0,
             columnspan=6,
             sticky="w",
             padx=16,
             pady=(4, 6),
         )
+
         self.btn_extract = ttk.Button(
             fr_btn,
             text="Extract Data",
@@ -305,17 +310,17 @@ class MASTER_TRACKER_BUILDER(ToolView):
         )
         self.btn_extract.grid(row=0, column=0)
 
-        # ---- Row 16: Tracker Tools heading ----
+        # ---- Row 17: Tracker Tools heading ----
         ttk.Label(self, text="Tracker Tools", font=FONT_H1).grid(
-            row=16, column=0, columnspan=6, sticky="w", padx=16, pady=(12, 4)
+            row=17, column=0, columnspan=6, sticky="w", padx=16, pady=(12, 4)
         )
 
-        # ---- Row 17: Tools row
+        # ---- Row 18: Tools row
         # left: Update Trackers
         # right: Database + Tracker dropdowns
         fr_tools = ttk.Frame(self)
         fr_tools.grid(
-            row=17, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 8)
+            row=18, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 8)
         )
         fr_tools.columnconfigure(0, weight=0)  # left buttons
         fr_tools.columnconfigure(1, weight=1)  # spacer
@@ -376,19 +381,19 @@ class MASTER_TRACKER_BUILDER(ToolView):
         self.tracker_dd.grid(row=0, column=3, sticky="e")
         self.tracker_dd.bind("<<ComboboxSelected>>", lambda _e: self._refresh_table())
 
-        # ---- Row 18: Row Count (between tools and table)
+        # ---- Row 19: Row Count (between tools and table)
         fr_count = ttk.Frame(self)
         fr_count.grid(
-            row=18, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6)
+            row=19, column=0, columnspan=6, sticky="ew", padx=16, pady=(0, 6)
         )
         ttk.Label(fr_count, textvariable=self.count_var).grid(
             row=0, column=0, sticky="w"
         )
 
-        # ---- Row 19: Table (Treeview) with scrollbars
+        # ---- Row 20: Table (Treeview) with scrollbars
         lf = ttk.LabelFrame(self, text="Tracker View")
         lf.grid(
-            row=19, column=0, columnspan=6,
+            row=20, column=0, columnspan=6,
             sticky="nsew", padx=16, pady=(0, 12)
         )
 
@@ -407,7 +412,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
         lf.columnconfigure(0, weight=1)
 
         # Let the table area grow
-        self.rowconfigure(19, weight=1)
+        self.rowconfigure(20, weight=1)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
@@ -1007,10 +1012,11 @@ class MASTER_TRACKER_BUILDER(ToolView):
     def _update_step2_state(self, *_args) -> None:
         """
         Enable 'Extract Data' only when we have valid files for:
-          - 4x SAP (Maintenance, Poles, Poles RFC, WMP)
+          - 5x SAP (Maintenance, Maintenance RFC, Poles, Poles RFC, WMP)
           - 1x EPW
           - 1x Land
-        EPW / Land are shared across all trackers.
+          - 1x Joint Pole
+        EPW / Land / Joint Pole are shared across all trackers.
         """
         if self.btn_extract is None:
             return  # UI not fully built yet
@@ -1023,6 +1029,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
             self.var_sap_wmp.get().strip(),
             self.var_epw.get().strip(),
             self.var_land.get().strip(),
+            self.var_joint.get().strip(),   # <-- NEW
         ]
 
         all_ok = all(p and os.path.isfile(p) for p in required_paths)
@@ -1046,6 +1053,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
             "WMP SAP": self.var_sap_wmp.get().strip(),
             "EPW": self.var_epw.get().strip(),
             "LAND": self.var_land.get().strip(),
+            "JOINT": self.var_joint.get().strip(),  # <-- NEW
         }
 
         missing = [k for k, p in paths.items() if not p or not os.path.isfile(p)]
@@ -1118,6 +1126,7 @@ class MASTER_TRACKER_BUILDER(ToolView):
 
                 epw_path = paths["EPW"]
                 land_path = paths["LAND"]
+                joint_path = paths["JOINT"]
 
                 for (
                     label,
@@ -1157,6 +1166,10 @@ class MASTER_TRACKER_BUILDER(ToolView):
                         SAP_STATUS_TO_KEEP=sap_status_to_keep,
                     )
                     msgs.append(f"{label}: {t3} (Land) = {n3:,} rows")
+
+                    # Joint Pole – shared file, filtered by each program's ALLOWED_MAT
+                    tbl, n = pull_joint_pole_data(db_path, joint_path, allowed_mat)
+                    msgs.append(f"{label}: {tbl} (Joint Pole) = {n:,} rows")
 
                 def done_ok() -> None:
                     busy.finish()
