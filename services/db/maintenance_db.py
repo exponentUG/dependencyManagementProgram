@@ -58,12 +58,12 @@ MPP_SCHEMA: Dict[str, str] = {
     "Div": "TEXT",
     "Notification": "INTEGER",
     "Order": "INTEGER",
-    "Planning Order": "INTEGER",                       #not needed
-    "Resource": "TEXT",                       #not needed
-    "Work Plan Date": "TEXT",       # stored as "MM/DD/YYYY"
-    "Permit Exp Date": "TEXT",      # stored as "MM/DD/YYYY"
-    "CLICK Start Date": "TEXT",     # NEW: stored as "MM/DD/YYYY"
-    "CLICK End Date": "TEXT",       # NEW: stored as "MM/DD/YYYY"
+    "Planning Order": "INTEGER",           #not needed
+    "Resource": "TEXT",                    #not needed
+    "Work Plan Date": "TEXT",              # stored as "MM/DD/YYYY"
+    "Permit Exp Date": "TEXT",             # stored as "MM/DD/YYYY"
+    "CLICK Start Date": "TEXT",            # stored as "MM/DD/YYYY"
+    "CLICK End Date": "TEXT",              # stored as "MM/DD/YYYY"
     "Project Reporting Year": "INTEGER",
     "Program": "TEXT",
     "Sub-Category": "TEXT",
@@ -71,10 +71,18 @@ MPP_SCHEMA: Dict[str, str] = {
     "Priority": "TEXT",
     "MAT": "TEXT",
     "Notif Status": "TEXT",
-    "Order User Status": "TEXT",                       #not needed
+    "Order User Status": "TEXT",           #not needed
     "Primary Status": "TEXT",
-    "Job Owner": "TEXT",                       #not needed
+    "Job Owner": "TEXT",                   #not needed
     "Project Managed Flag": "TEXT",
+
+    # --- NEW MPP COLUMNS ---
+    "WMP Commitments": "TEXT",
+    "PEND In": "TEXT",
+    "Shovel Ready Date": "TEXT",
+    "LEAPs Combined Exp Out Date": "TEXT",
+    "Est Out Date": "TEXT",
+    "Completion Deadline Date": "TEXT",
 }
 
 # ------------------------
@@ -201,7 +209,17 @@ def _coerce_date_mdy(series: pd.Series) -> pd.Series:
 
     return series.apply(to_mdy)
 
-_DATE_COLS = {"Work Plan Date", "Permit Exp Date", "CLICK Start Date", "CLICK End Date"}
+_DATE_COLS = {
+    "Work Plan Date",
+    "Permit Exp Date",
+    "CLICK Start Date",
+    "CLICK End Date",
+    # --- NEW date-like columns ---
+    "Shovel Ready Date",
+    "LEAPs Combined Exp Out Date",
+    "Est Out Date",
+    "Completion Deadline Date",
+}
 
 def _apply_target_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """Coerce df columns to schema dtypes for consistent storage."""
@@ -247,6 +265,14 @@ def load_and_filter_csv(csv_path: str) -> pd.DataFrame:
         "Job Owner",
         "Project Managed Flag",
         "Mega Bundle Flag",   # NEW: only used for filtering, not stored
+
+        # -------- NEW MPP COLUMNS TO PULL IN --------
+        "WMP Commitments",
+        "PEND In",
+        "Shovel Ready Date",
+        "LEAPs Combined Exp Out Date",
+        "Est Out Date",
+        "Completion Deadline Date",
     ]
 
     # --- Single-pass read (no header-only pre-pass) ---
