@@ -264,7 +264,7 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
             COALESCE(m.notif_status, '') AS notif_status,
             COALESCE(m.sap_status,   '') AS sap_status,
 
-            -- NEW: WPD + PRY carried through
+            -- WPD + PRY carried through
             COALESCE(m.work_plan_date_raw, '') AS work_plan_date_raw,
             m.work_plan_date_iso               AS work_plan_date_iso,
             m.pry_int                          AS pry_int,
@@ -459,7 +459,7 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
         )
         conn.commit()
 
-    # 10) Parsed override
+    # 10) Parsed override for "Review complete. No permit needed."
     cur.execute(
         'UPDATE land_tracker SET "Action" = ? WHERE "Parsed Action" = ?',
         ('Review complete. No permit needed.', 'Review complete. No permit needed.')
@@ -467,9 +467,6 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
     conn.commit()
 
     # 11) Monument-survey override
-    # If Parsed Action = "Monument survey complete.":
-    #   - and both SP57 & RP57 are COMP  -> "Monument survey complete. No action required."
-    #   - otherwise                      -> "check"
     cur.execute(
         'UPDATE land_tracker '
         'SET "Action" = ? '
@@ -486,11 +483,55 @@ def build_land_tracker(conn: sqlite3.Connection) -> int:
     )
     conn.commit()
 
-    # 12) Permit-expired rule:
+    # 12) Parsed anticipated issue date in the future -> no action required
+    #    (uses Parsed Anticipated Issue Date as a fallback trigger)
+    parsed_anticip_iso = _to_iso_case_flex('NULLIF(TRIM(COALESCE("Parsed Anticipated Issue Date","")), "")')
+
+    cur.execute(f"""
+        UPDATE land_tracker
+        SET "Action" = 'Anticipated issue date is in the future. No action required.'
+        WHERE {parsed_anticip_iso} IS NOT NULL
+          AND date({parsed_anticip_iso}) > date(?);
+    """, (today_iso,))
+    conn.commit()
+
+    # 13) Under-review WPD-based rules (use __land_base.work_plan_date_iso)
+    # Case 1: Parsed Action = "Under review.", SP57/RP57 = ACTD,
+    #         WPD in (today, today+90 days] -> ask for update
+    cur.execute("""
+        UPDATE land_tracker
+        SET "Action" = 'Please provide update on land application. WPD in less than 3 months.'
+        WHERE "Parsed Action" = 'Under review.'
+          AND UPPER(TRIM(COALESCE("SP57",""))) = 'ACTD'
+          AND UPPER(TRIM(COALESCE("RP57",""))) = 'ACTD'
+          AND "Order" IN (
+              SELECT b."Order"
+              FROM __land_base b
+              WHERE b.work_plan_date_iso IS NOT NULL
+                AND date(b.work_plan_date_iso) > date(?)
+                AND date(b.work_plan_date_iso) <= date(?, '+90 days')
+          );
+    """, (today_iso, today_iso))
+
+    # Case 2: same filters but WPD > today+90 days -> no action required
+    cur.execute("""
+        UPDATE land_tracker
+        SET "Action" = 'Under review. No action required.'
+        WHERE "Parsed Action" = 'Under review.'
+          AND UPPER(TRIM(COALESCE("SP57",""))) = 'ACTD'
+          AND UPPER(TRIM(COALESCE("RP57",""))) = 'ACTD'
+          AND "Order" IN (
+              SELECT b."Order"
+              FROM __land_base b
+              WHERE b.work_plan_date_iso IS NOT NULL
+                AND date(b.work_plan_date_iso) > date(?, '+90 days')
+          );
+    """, (today_iso,))
+    conn.commit()
+
+    # 14) Permit-expired rule:
     # If max(Permit Expiration Date, Parsed Permit Expiration Date) is in the past
     # AND Notification Status = OPEN -> Permit expired action
-    today_iso = today.isoformat()
-
     exp1_iso = _to_iso_case_flex('NULLIF(TRIM(COALESCE("Permit Expiration Date","")), "")')
     exp2_iso = _to_iso_case_flex('NULLIF(TRIM(COALESCE("Parsed Permit Expiration Date","")), "")')
 

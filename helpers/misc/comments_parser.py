@@ -8,6 +8,7 @@ NO_PERMIT_ACTION        = "Review complete. No permit needed."
 PERMIT_OBTAINED_ACTION  = "Permit obtained."
 PERMIT_APPLIED_ACTION   = "Permit applied for."
 MONUMENT_DONE_ACTION    = "Monument survey complete."
+UNDER_REVIEW_ACTION     = "Under review."
 
 # ============================================================
 # 1) NO-PERMIT (review complete) — robust pattern set
@@ -81,6 +82,27 @@ def _matches_no_permit(text: str) -> bool:
         for rx in _pos_fuzzy_re:
             if rx.search(t):
                 return True
+    return False
+
+# ============================================================
+# 1b) UNDER REVIEW — targeted “batch for land review” patterns
+# ============================================================
+
+_UNDER_REVIEW_PATTERNS = [
+    # e.g. "WR Team Batch for Land Review"
+    r"\bwr\s*team\b.*\bbatch\b.*\bland\s+review\b",
+    # e.g. "Batch for Land Review", "Batched for land review"
+    r"\bbatch(?:ed)?\s+for\s+land\s+review\b",
+]
+
+_under_review_re = [re.compile(p, re.IGNORECASE | re.DOTALL) for p in _UNDER_REVIEW_PATTERNS]
+
+
+def _matches_under_review(text: str) -> bool:
+    t = text or ""
+    for rx in _under_review_re:
+        if rx.search(t):
+            return True
     return False
 
 # ============================================================
@@ -212,9 +234,10 @@ def parse_comment_semantics(latest_comment: str) -> Tuple[str, str, str]:
     Bucket priority:
       1) Permit obtained.              -> ("Permit obtained.", "-", expiry_or "-")
       2) Permit applied for.           -> ("Permit applied for.", anticipated_or "-", "-")
-      3) Review complete (no permit).  -> ("Review complete. No permit needed.", "-", "-")
-      4) Monument survey complete.     -> ("Monument survey complete.", "-", "-")
-      5) Fallback                      -> ("check", "-", "-")
+      3) Under review.                 -> ("Under review.", "-", "-")
+      4) Review complete (no permit).  -> ("Review complete. No permit needed.", "-", "-")
+      5) Monument survey complete.     -> ("Monument survey complete.", "-", "-")
+      6) Fallback                      -> ("check", "-", "-")
     """
     txt = latest_comment or ""
 
@@ -228,13 +251,17 @@ def parse_comment_semantics(latest_comment: str) -> Tuple[str, str, str]:
         antic = _extract_anticipated(txt) or "-"
         return (PERMIT_APPLIED_ACTION, antic, "-")
 
-    # 3) Review complete / No permit needed
+    # 3) Under review
+    if _matches_under_review(txt):
+        return (UNDER_REVIEW_ACTION, "-", "-")
+
+    # 4) Review complete / No permit needed
     if _matches_no_permit(txt):
         return (NO_PERMIT_ACTION, "-", "-")
 
-    # 4) Monument survey complete
+    # 5) Monument survey complete
     if _matches_monument_done(txt):
         return (MONUMENT_DONE_ACTION, "-", "-")
 
-    # 5) Default
+    # 6) Default
     return ("check", "-", "-")
