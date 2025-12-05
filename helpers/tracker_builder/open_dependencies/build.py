@@ -205,6 +205,7 @@ def build_open_dependencies(conn: sqlite3.Connection) -> int:
                 UPPER(TRIM(COALESCE(st."AP25",'')))           AS ap25,
                 UPPER(TRIM(COALESCE(st."DS28",'')))           AS ds28,
                 UPPER(TRIM(COALESCE(st."DS73",'')))           AS ds73,
+                UPPER(TRIM(COALESCE(st."DS11",'')))           AS ds11,
                 e.epw_iso  AS epw_iso,
                 mp.mpp_iso AS mpp_iso,
                 CASE
@@ -229,8 +230,8 @@ def build_open_dependencies(conn: sqlite3.Connection) -> int:
                 THEN 'Closed'
               ELSE
                 CASE
-                  WHEN sp56 IN ('INPR','ACTD')
-                       OR rp56 IN ('INPR','INPT','ACTD')
+                  WHEN sp56 IN ('INPR','ACTD','UNKNOWN')
+                       OR rp56 IN ('INPR','INPT','ACTD','UNKNOWN')
                        OR (rp56='COMP' AND (permit_exp_iso IS NULL OR date(permit_exp_iso) < date(?)))
                     THEN 'Pending'
                   ELSE 'Closed'
@@ -249,8 +250,8 @@ def build_open_dependencies(conn: sqlite3.Connection) -> int:
                     THEN 'Closed'
                   WHEN { "(TRIM(lt_action)='Monument survey complete. No action required.' AND sp57='COMP' AND rp57='COMP')" if land_tracker_exists else "0" }
                     THEN 'Closed'
-                  WHEN sp57 IN ('INPR','ACTD')
-                       OR rp57 IN ('INPR','INPT','ACTD')
+                  WHEN sp57 IN ('INPR','ACTD','UNKNOWN')
+                       OR rp57 IN ('INPR','INPT','ACTD','UNKNOWN')
                        OR (rp57='COMP' AND (land_iso IS NULL OR date(land_iso) < date(?)))
                     THEN 'Pending'
                   ELSE 'Closed'
@@ -269,13 +270,15 @@ def build_open_dependencies(conn: sqlite3.Connection) -> int:
                 END
             END AS "FAA",
 
-            -- Environment (unchanged)
+            -- Environment
             CASE
               WHEN ps NOT IN ({placeholders})
                 THEN 'Closed'
               ELSE
                 CASE
-                  WHEN pc21='INPR' THEN 'Pending'
+                  WHEN (pc21 IN ('ACTD', 'INPR', 'UNKNOWN')
+                        OR ds11 IN ('ACTD', 'INPR', 'UNKNOWN'))
+                    THEN 'Pending'
                   ELSE 'Closed'
                 END
             END AS "Environment",

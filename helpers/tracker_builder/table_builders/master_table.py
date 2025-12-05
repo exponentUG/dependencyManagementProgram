@@ -1,5 +1,6 @@
 # helpers/wmp_tracker_builder/table_builders/master_table.py
 from __future__ import annotations
+import os
 import sqlite3
 from typing import List, Tuple
 
@@ -14,6 +15,7 @@ COLUMNS: List[str] = [
     "Priority",
     "Div",
     "Region",
+    "Program Manager",       # <-- NEW COLUMN (from static_lists.pm_list)
     "WPD",
     "Est Req",
     "Shovel Ready Date",
@@ -64,6 +66,8 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
         * If open_dependencies is missing, Open Dependencies / Stage of Job are ''.
         * If sap_tracker is missing, all SP/RP/DS/PC/AP fields are ''.
     - If 'Stage of Job' column doesn't exist yet in open_dependencies, it is shown as ''.
+    - Program Manager is looked up from data/static_lists.sqlite3, table pm_list,
+      by matching mpp_data."MAT" to pm_list."MAT". If no match or no table, it is ''.
     """
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
@@ -75,6 +79,20 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
         has_mpp = _table_exists(cur, "mpp_data")
         has_open = _table_exists(cur, "open_dependencies")
         has_sap = _table_exists(cur, "sap_tracker")
+
+        # Check for static_lists.pm_list
+        static_db_path = os.path.join("data", "static_lists.sqlite3")
+        has_pm_list = False
+        if os.path.exists(static_db_path):
+            try:
+                cur.execute('ATTACH DATABASE ? AS static_db', (static_db_path,))
+                cur.execute(
+                    "SELECT name FROM static_db.sqlite_master "
+                    "WHERE type='table' AND name='pm_list' LIMIT 1"
+                )
+                has_pm_list = cur.fetchone() is not None
+            except Exception:
+                has_pm_list = False
 
         # Does open_dependencies have 'Stage of Job'?
         has_stage = False
@@ -136,6 +154,14 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
 
             mpp_join = ""
 
+        # Program Manager from static_db.pm_list (by MAT)
+        if has_mpp and has_pm_list:
+            pm_expr = 'COALESCE(pm."Program Manager", \'\')'
+            pm_join = 'LEFT JOIN static_db.pm_list pm ON pm."MAT" = m."MAT"'
+        else:
+            pm_expr = "''"
+            pm_join = ""
+
         # open_dependencies fields
         if has_open:
             open_deps_expr = 'COALESCE(od."Open Dependencies", \'\')'
@@ -196,6 +222,7 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                 {priority_expr}       AS "Priority",
                 {div_expr}            AS "Div",
                 {region_expr}         AS "Region",
+                {pm_expr}             AS "Program Manager",
                 {wpd_expr}            AS "WPD",
                 {est_req_expr}        AS "Est Req",
                 {shovel_expr}         AS "Shovel Ready Date",
@@ -227,6 +254,7 @@ def get_master_table(db_path: str) -> Tuple[list[str], list[tuple]]:
                 {compl_deadline_expr} AS "Completion Deadline Date"
             FROM order_tracking_list ot
             {mpp_join}
+            {pm_join}
             {open_join}
             {sap_join}
             ORDER BY ot."Order"

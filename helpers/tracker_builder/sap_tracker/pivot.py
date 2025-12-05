@@ -92,16 +92,16 @@ def update_codes_batch(conn: sqlite3.Connection) -> int:
             p."Order",
             -- SP56
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
-                 WHEN COALESCE(p.has_sp56,0)=1 THEN COALESCE(p.tus_sp56,'ACTD') ELSE 'NOTN' END AS SP56,    
+                 WHEN COALESCE(p.has_sp56,0)=1 THEN COALESCE(p.tus_sp56,'ACTD') ELSE 'UNKNOWN' END AS SP56,    
             -- RP56
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
-                 WHEN COALESCE(p.has_rp56,0)=1 THEN COALESCE(p.tus_rp56,'ACTD') ELSE 'NOTN' END AS RP56,
+                 WHEN COALESCE(p.has_rp56,0)=1 THEN COALESCE(p.tus_rp56,'ACTD') ELSE 'UNKNOWN' END AS RP56,
             -- SP57
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
-                 WHEN COALESCE(p.has_sp57,0)=1 THEN COALESCE(p.tus_sp57,'ACTD') ELSE 'NOTN' END AS SP57,
+                 WHEN COALESCE(p.has_sp57,0)=1 THEN COALESCE(p.tus_sp57,'ACTD') ELSE 'UNKNOWN' END AS SP57,
             -- RP57
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
-                 WHEN COALESCE(p.has_rp57,0)=1 THEN COALESCE(p.tus_rp57,'ACTD') ELSE 'NOTN' END AS RP57,
+                 WHEN COALESCE(p.has_rp57,0)=1 THEN COALESCE(p.tus_rp57,'ACTD') ELSE 'UNKNOWN' END AS RP57,
             -- DS42
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
                  WHEN COALESCE(p.has_ds42,0)=1 THEN COALESCE(p.tus_ds42,'INPR') ELSE 'NOTN' END AS DS42,
@@ -116,10 +116,10 @@ def update_codes_batch(conn: sqlite3.Connection) -> int:
                  WHEN COALESCE(p.has_pc24,0)=1 THEN COALESCE(p.tus_pc24,'INPR') ELSE 'NOTN' END AS PC24,
             -- DS11
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
-                 WHEN COALESCE(p.has_ds11,0)=1 THEN COALESCE(p.tus_ds11,'INPR') ELSE 'NOTN' END AS DS11,
+                 WHEN COALESCE(p.has_ds11,0)=1 THEN COALESCE(p.tus_ds11,'INPR') ELSE 'UNKNOWN' END AS DS11,
             -- PC21
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({pe_placeholders}) THEN 'Pending Estimation'
-                 WHEN COALESCE(p.has_pc21,0)=1 THEN COALESCE(p.tus_pc21,'INPR') ELSE 'NOTN' END AS PC21,
+                 WHEN COALESCE(p.has_pc21,0)=1 THEN COALESCE(p.tus_pc21,'INPR') ELSE 'UNKNOWN' END AS PC21,
             -- AP10 (gated)
             CASE WHEN UPPER(COALESCE(st."Primary Status",'')) IN ({ap_placeholders})
                     THEN CASE WHEN COALESCE(p.has_ap10,0)=1

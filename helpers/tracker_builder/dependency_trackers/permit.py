@@ -20,6 +20,7 @@ PERMIT_TRACKER_COLS = [
     "Action",
 ]
 
+
 def _ensure_table(conn: sqlite3.Connection) -> None:
     """
     Ensure permit_tracker exists with the desired schema.
@@ -29,7 +30,8 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()
 
     # Create if missing with the full, current schema
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS permit_tracker (
             "Order" INTEGER PRIMARY KEY,
             "Notification Status" TEXT,
@@ -45,7 +47,8 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
             "LEAPS Cycle Time" TEXT,
             "Action" TEXT
         )
-    """)
+    """
+    )
     conn.commit()
 
     # Check actual columns
@@ -57,7 +60,8 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
         return
 
     # If differs, migrate to new schema order
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS permit_tracker__new (
             "Order" INTEGER PRIMARY KEY,
             "Notification Status" TEXT,
@@ -73,10 +77,11 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
             "LEAPS Cycle Time" TEXT,
             "Action" TEXT
         )
-    """)
+    """
+    )
 
     # Map existing columns where present, else NULL
-    select_parts = []
+    select_parts: list[str] = []
     for c in PERMIT_TRACKER_COLS:
         if c in existing_cols:
             select_parts.append(f'"{c}"')
@@ -85,13 +90,15 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
     select_sql = ", ".join(select_parts)
     cols_csv = ", ".join(f'"{c}"' for c in PERMIT_TRACKER_COLS)
 
-    cur.execute((
-        f'INSERT OR REPLACE INTO permit_tracker__new ({cols_csv}) '
-        f'SELECT {select_sql} FROM permit_tracker'
-    ))
+    cur.execute(
+        (
+            f'INSERT OR REPLACE INTO permit_tracker__new ({cols_csv}) '
+            f"SELECT {select_sql} FROM permit_tracker"
+        )
+    )
 
     cur.execute("DROP TABLE permit_tracker")
-    cur.execute("ALTER TABLE permit_tracker__new RENAME TO permit_tracker")
+    cur.execute('ALTER TABLE permit_tracker__new RENAME TO permit_tracker')
     conn.commit()
 
 
@@ -109,6 +116,7 @@ def _to_iso_case(col_expr: str) -> str:
     END
     """
 
+
 def _iso_to_mdy(expr_iso: str) -> str:
     """Render an ISO date expression back to MM/DD/YYYY (text) inside SQL."""
     return f"""
@@ -118,6 +126,7 @@ def _iso_to_mdy(expr_iso: str) -> str:
       ELSE ''
     END
     """
+
 
 def build_permit_tracker(conn: sqlite3.Connection) -> int:
     """
@@ -130,16 +139,19 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
     today_iso = datetime.now().date().isoformat()
 
     # 1) Orders with Permit='Pending'
-    cur.executescript("""
+    cur.executescript(
+        """
         DROP TABLE IF EXISTS __pt_orders;
         CREATE TEMP TABLE __pt_orders AS
         SELECT od."Order"
         FROM open_dependencies od
         WHERE od."Permit" = 'Pending';
-    """)
+    """
+    )
 
     # 2) SP56/RP56 from sap_tracker
-    cur.executescript("""
+    cur.executescript(
+        """
         DROP TABLE IF EXISTS __pt_sap;
         CREATE TEMP TABLE __pt_sap AS
         SELECT st."Order",
@@ -147,10 +159,12 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
                UPPER(TRIM(COALESCE(st."RP56", ''))) AS rp56
         FROM sap_tracker st
         INNER JOIN __pt_orders o ON o."Order" = st."Order";
-    """)
+    """
+    )
 
     # 3) EPW one-per-order and normalize expiration
-    cur.executescript("""
+    cur.executescript(
+        """
         DROP TABLE IF EXISTS __pt_epw_one;
         CREATE TEMP TABLE __pt_epw_one AS
         WITH c AS (
@@ -183,10 +197,12 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
               ELSE NULL
             END AS epw_exp_iso
         FROM __pt_epw_one eo;
-    """)
+    """
+    )
 
     # 4) MPP (already coerced to MM/DD/YYYY) -> ISO; plus Primary/Notif Status
-    cur.executescript(f"""
+    cur.executescript(
+        f"""
         DROP TABLE IF EXISTS __pt_mpp;
         CREATE TEMP TABLE __pt_mpp AS
         SELECT
@@ -211,10 +227,12 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
             {_to_iso_case('click_end_raw')}    AS click_end_iso,
             {_to_iso_case('mpp_exp_raw')}      AS mpp_exp_iso
         FROM __pt_mpp;
-    """)
+    """
+    )
 
     # 5) Combine
-    cur.executescript("""
+    cur.executescript(
+        """
         DROP TABLE IF EXISTS __pt_combined;
         CREATE TEMP TABLE __pt_combined AS
         SELECT
@@ -232,10 +250,12 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
         LEFT JOIN __pt_sap      s ON s."Order" = o."Order"
         LEFT JOIN __pt_epw_norm e ON e."Order" = o."Order"
         LEFT JOIN __pt_mpp_norm m ON m."Order" = o."Order";
-    """)
+    """
+    )
 
     # 6) E Permit Status derivation
-    cur.executescript("""
+    cur.executescript(
+        """
         DROP TABLE IF EXISTS __pt_with_epermit;
         CREATE TEMP TABLE __pt_with_epermit AS
         SELECT
@@ -257,10 +277,12 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
               ELSE TRIM(epermit_update)
             END AS epermit_status
         FROM __pt_combined;
-    """)
+    """
+    )
 
     # 7) Pick later expiration (ISO)
-    cur.executescript("""
+    cur.executescript(
+        """
         DROP TABLE IF EXISTS __pt_with_exp;
         CREATE TEMP TABLE __pt_with_exp AS
         SELECT
@@ -280,11 +302,13 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
             END AS final_exp_iso,
             epermit_status
         FROM __pt_with_epermit;
-    """)
+    """
+    )
 
     # 8) Action logic (with bound params)
     cur.executescript("DROP TABLE IF EXISTS __pt_action;")
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TEMP TABLE __pt_action AS
         SELECT
           "Order",
@@ -297,57 +321,93 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
           final_exp_iso,
           epermit_status,
           CASE
+            -- Not Needed + SP/RP56 not complete, and not both UNKNOWN
             WHEN epermit_status = 'Not Needed'
+                 AND (
+                     UPPER(COALESCE(rp56, '')) <> 'COMP'
+                     OR UPPER(COALESCE(sp56, '')) <> 'COMP'
+                 )
+                 AND NOT (
+                     UPPER(COALESCE(rp56, '')) = 'UNKNOWN'
+                     AND UPPER(COALESCE(sp56, '')) = 'UNKNOWN'
+                 )
               THEN 'Permit not needed. Please close SP/RP56.'
 
+            -- Permit expired + construction window near-term:
+            -- E Permit Status in (Approved, Expired),
+            -- Permit Exp Date (final_exp_iso) in the past,
+            -- CLICK End in the future,
+            -- CLICK Start <= 90 days in the future
+            WHEN epermit_status IN ('Approved', 'Expired')
+                 AND final_exp_iso IS NOT NULL
+                 AND date(final_exp_iso) < date(?)
+                 AND click_end_iso IS NOT NULL
+                 AND date(click_end_iso) >= date(?)
+                 AND click_start_iso IS NOT NULL
+                 AND date(click_start_iso) <= date(?, '+90 day')
+              THEN 'Permit expired. Please request for extension.'
+
+            -- Permit still valid (future or today) -> confirm & close tasks
             WHEN final_exp_iso IS NOT NULL AND date(final_exp_iso) >= date(?)
               THEN 'Please confirm permit is approved and complete SAP task.'
 
-            WHEN final_exp_iso IS NOT NULL AND date(final_exp_iso) < date(?) AND (click_start_iso IS NULL)
-              THEN 'Please provide CLICK Date for extension.'
+            -- Expired but CLICK End past / missing -> need CLICK date for extension
+            WHEN epermit_status IN ('Approved', 'Expired')
+                 AND final_exp_iso IS NOT NULL
+                 AND date(final_exp_iso) < date(?)
+                 AND (
+                     click_end_iso IS NULL
+                     OR date(click_end_iso) < date(?)
+                 )
+              THEN 'Permit expired. Please provide CLICK Date for extension.'
 
-            WHEN final_exp_iso IS NOT NULL AND date(final_exp_iso) < date(?) AND date(click_start_iso) >= date(?)
-              THEN 'Please request for extension.'
-
-            WHEN final_exp_iso IS NOT NULL AND date(final_exp_iso) < date(?) AND (click_start_iso IS NOT NULL) AND date(click_start_iso) < date(?)
-              THEN 'Please request for extension.'
-
+            -- In progress but past WPD
             WHEN epermit_status = 'In Progress' AND wpd_iso IS NOT NULL AND date(wpd_iso) < date(?)
               THEN 'In progress but past WPD. Please escalate.'
 
+            -- In progress and WPD ok / missing
             WHEN epermit_status = 'In Progress' AND (wpd_iso IS NULL OR date(wpd_iso) >= date(?))
               THEN 'In progress.'
 
+            -- Not Created, WPD beyond threshold
             WHEN epermit_status = 'Not Created' AND (wpd_iso IS NOT NULL) AND date(wpd_iso) >= date(?)
               THEN 'Permit not created. Need current WPD.'
 
+            -- Not Created and past WPD
             WHEN epermit_status = 'Not Created' AND (wpd_iso IS NOT NULL) AND date(wpd_iso) < date(?)
               THEN 'Not created and past WPD. Please escalate.'
 
-            WHEN epermit_status = 'Submitted' AND CAST(COALESCE(NULLIF(TRIM(submit_days), ''), '0') AS INTEGER) > 45
+            -- Submitted > 45 days
+            WHEN epermit_status = 'Submitted'
+                 AND CAST(COALESCE(NULLIF(TRIM(submit_days), ''), '0') AS INTEGER) > 45
               THEN 'Submitted over 45 days. Please provide update.'
 
-            WHEN epermit_status = 'Submitted' AND CAST(COALESCE(NULLIF(TRIM(submit_days), ''), '0') AS INTEGER) <= 45
+            -- Submitted <= 45 days
+            WHEN epermit_status = 'Submitted'
+                 AND CAST(COALESCE(NULLIF(TRIM(submit_days), ''), '0') AS INTEGER) <= 45
               THEN 'In progress.'
 
             ELSE 'check'
           END AS action_text
         FROM __pt_with_exp
-    """, (
-        today_iso,   # future check
-        today_iso,   # past (no click)
-        today_iso,   # past exp
-        today_iso,   # click >= today
-        today_iso,   # past exp
-        today_iso,   # click < today
-        today_iso,   # WPD past
-        today_iso,   # WPD future or null
-        "2026-01-01",# WPD >= 2026-01-01 (per current logic)
-        today_iso,   # WPD past
-    ))
+    """,
+        (
+            today_iso,   # 1: final_exp < today (expired condition for "request extension" case)
+            today_iso,   # 2: click_end >= today
+            today_iso,   # 3: click_start <= today + 90 days
+            today_iso,   # 4: final_exp >= today (confirm & complete SAP)
+            today_iso,   # 5: final_exp < today (expired + CLICK End past/null -> need CLICK date)
+            today_iso,   # 6: click_end < today in above branch
+            today_iso,   # 7: WPD past
+            today_iso,   # 8: WPD future or null
+            "2026-01-01",# 9: Not Created, WPD >= 2026-01-01
+            today_iso,   # 10: Not Created, WPD past
+        ),
+    )
 
     # 9) Final rows with formatted MM/DD/YYYY + Notification/SAP Status columns
-    cur.executescript(f"""
+    cur.executescript(
+        f"""
         DROP TABLE IF EXISTS __permit_tracker_final;
         CREATE TEMP TABLE __permit_tracker_final AS
         SELECT
@@ -365,19 +425,24 @@ def build_permit_tracker(conn: sqlite3.Connection) -> int:
             cycle_time          AS "LEAPS Cycle Time",
             action_text         AS "Action"
         FROM __pt_action;
-    """)
+    """
+    )
 
     # 10) Upsert into final table
     before = conn.total_changes
     cols_csv = ", ".join(f'"{c}"' for c in PERMIT_TRACKER_COLS)
 
-    # NEW: remove rows that are no longer in the current pending set
-    cur.execute('DELETE FROM permit_tracker WHERE "Order" NOT IN (SELECT "Order" FROM __permit_tracker_final)')
+    # Remove rows that are no longer in the current pending set
+    cur.execute(
+        'DELETE FROM permit_tracker WHERE "Order" NOT IN (SELECT "Order" FROM __permit_tracker_final)'
+    )
 
-    cur.executescript(f"""
+    cur.executescript(
+        f"""
         INSERT OR REPLACE INTO permit_tracker ({cols_csv})
         SELECT {cols_csv}
         FROM __permit_tracker_final;
-    """)
+    """
+    )
     conn.commit()
     return conn.total_changes - before
