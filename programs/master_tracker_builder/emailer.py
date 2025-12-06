@@ -109,6 +109,7 @@ class Master_Emailer(ToolView):
          - permit_tracker rows where Action =
              'Permit expired. Please provide CLICK Date for extension.'
          - Enriched with MAT and Program Manager / LAN ID (from pm_list).
+         - Emailed per-LAN-ID, with first-name greeting.
     """
 
     def __init__(self, master: tk.Misc | None = None, **kwargs: Any) -> None:
@@ -359,12 +360,20 @@ class Master_Emailer(ToolView):
                 )
 
         elif cat == "Permit: Permit expired. Need CLICK Date for extension.":
-            # We'll decide To/CC/Subject/Body after we lock down the recipients logic
-            self.to_var.set("")
-            self.cc_var.set("")
-            self.subject_var.set("")
+            # UI shows it's multiple emails by LAN ID
+            self.to_var.set("(multiple by LAN ID)")
+            self.cc_var.set("p6b6@pge.com; pusd@pge.com; s2f6@pge.com")
+            self.subject_var.set("Request for Updated CLICK Dates due to Expired Permit")
+
             if self.body_text is not None:
                 self.body_text.delete("1.0", "end")
+                self.body_text.insert(
+                    "1.0",
+                    "Hi <Program Manager First Name>,\n\n"
+                    "I hope you are doing well. The following order(s) has/have an "
+                    "expired permit and need updated CLICK Date(s) in order to request "
+                    "for an extension. Can you please review and provide the same?\n\n",
+                )
 
         else:
             # Fallback for any unknown future category
@@ -811,6 +820,14 @@ class Master_Emailer(ToolView):
             )
             return
 
+        cat = (self.category_var.get() or "").strip()
+
+        # Special flow: per-LAN-ID emails for "Need CLICK Date" category
+        if cat == "Permit: Permit expired. Need CLICK Date for extension.":
+            self._send_permit_need_click_emails(df)
+            return
+
+        # Standard single-email flow
         to_addr = self.to_var.get().strip()
         subject = self.subject_var.get().strip()
         cc_addr = self.cc_var.get().strip()
@@ -880,4 +897,186 @@ class Master_Emailer(ToolView):
             messagebox.showerror(
                 "Email Error",
                 f"Failed to create Outlook email draft:\n\n{type(e).__name__}: {e}",
+            )
+
+    def _send_permit_need_click_emails(self, df: pd.DataFrame) -> None:
+        """
+        Per-LAN-ID emails for:
+          "Permit: Permit expired. Need CLICK Date for extension."
+
+        Logic:
+          - Group by LAN ID.
+          - For each LAN ID group:
+              To: <LAN ID>@pge.com  (fallback to UI To if LAN ID blank)
+              CC: p6b6@pge.com; pusd@pge.com; s2f6@pge.com (or cc field)
+              Subject: Request for Updated CLICK Dates due to Expired Permit
+              Body: using the Body text as a template with
+                    <Program Manager First Name> placeholder
+              Table: only rows for that LAN ID, WITHOUT Program Manager / LAN ID columns
+        """
+        if df is None or df.empty:
+            messagebox.showinfo(
+                "No Orders",
+                "There are no matching orders to include in the email.",
+            )
+            return
+
+        # Columns we expect
+        if "LAN ID" not in df.columns:
+            messagebox.showerror(
+                "Missing LAN ID",
+                'The current table does not contain a "LAN ID" column.',
+            )
+            return
+
+        if "Program Manager" not in df.columns:
+            messagebox.showerror(
+                "Missing Program Manager",
+                'The current table does not contain a "Program Manager" column.',
+            )
+            return
+
+        # Base CC / Subject (can still be adjusted by user)
+        cc_base = self.cc_var.get().strip() or "p6b6@pge.com; pusd@pge.com; s2f6@pge.com"
+        subject = (
+            self.subject_var.get().strip()
+            or "Request for Updated CLICK Dates due to Expired Permit"
+        )
+        # Fallback To: if LAN ID is blank for a group
+        to_fallback = self.to_var.get().strip()
+
+        # Table columns: drop Program Manager / LAN ID from the emailed table
+        all_cols = self._current_columns or list(df.columns)
+        email_columns = [c for c in all_cols if c not in ("Program Manager", "LAN ID")]
+
+        # Body template from the text widget (single copy)
+        if self.body_text is not None:
+            body_template = self.body_text.get("1.0", "end").strip()
+        else:
+            body_template = ""
+
+        # If user cleared it, fall back to our default
+        if not body_template:
+            body_template = (
+                "Hi <Program Manager First Name>,\n\n"
+                "I hope you are doing well. The following order(s) has/have an "
+                "expired permit and need updated CLICK Date(s) in order to request "
+                "for an extension. Can you please review and provide the same?\n\n"
+            )
+
+        try:
+            import win32com.client as win32
+        except ImportError:
+            messagebox.showerror(
+                "Outlook Automation Error",
+                "pywin32 is required for Outlook automation.\n\n"
+                "Install it with:\n  pip install pywin32",
+            )
+            return
+
+        try:
+            app = win32.Dispatch("Outlook.Application")
+        except Exception as e:
+            messagebox.showerror(
+                "Outlook Error",
+                f"Failed to access Outlook:\n\n{type(e).__name__}: {e}",
+            )
+            return
+
+        # Group by LAN ID (including blanks as their own group)
+        grouped = df.groupby("LAN ID", dropna=False)
+
+        email_count = 0
+        for lan_id, sub in grouped:
+            if sub.empty:
+                continue
+
+            lan_id_str = ""
+            if isinstance(lan_id, str):
+                lan_id_str = lan_id.strip()
+            elif lan_id is not None:
+                lan_id_str = str(lan_id).strip()
+
+            # Determine To: use LAN ID if available, else fallback
+            if lan_id_str:
+                to_addr = f"{lan_id_str}@pge.com"
+            else:
+                to_addr = to_fallback
+
+            if not to_addr:
+                # Skip this group if we have no way to address it
+                print(
+                    "[Master_Emailer] Skipping group with empty LAN ID and no To: fallback."
+                )
+                continue
+
+            # Pick Program Manager first name
+            pm_series = (
+                sub.get("Program Manager")
+                .fillna("")
+                .astype(str)
+                .str.strip()
+            )
+            pm_series = pm_series[pm_series != ""]
+            if not pm_series.empty:
+                pm_full = pm_series.iloc[0]
+                pm_first = pm_full.split()[0] if pm_full else "there"
+            else:
+                pm_first = "there"
+
+            # Build body for this PM from the template (single, non-duplicated)
+            body_for_this = body_template.replace(
+                "<Program Manager First Name>", pm_first
+            )
+            if not body_for_this.endswith("\n\n"):
+                body_for_this = body_for_this.strip() + "\n\n"
+
+            # Narrow to columns we actually want in the table (no Program Manager / LAN ID)
+            try:
+                sub_for_table = sub[email_columns].copy()
+            except Exception:
+                # Fallback: intersect columns just in case
+                valid_cols = [c for c in email_columns if c in sub.columns]
+                sub_for_table = sub[valid_cols].copy()
+                email_columns = valid_cols
+
+            html_table = df_to_excelish_html(sub_for_table, email_columns)
+
+            # Convert body_text newlines into <br> for HTML
+            safe_body = (
+                body_for_this.replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .replace("\n", "<br>")
+            )
+
+            try:
+                mail = app.CreateItem(0)  # olMailItem
+                mail.Subject = subject
+                mail.To = to_addr
+                if cc_base:
+                    mail.CC = cc_base
+
+                mail.HTMLBody = (
+                    f"<p>{safe_body}</p>"
+                    + html_table
+                    + "<p>Thank you.</p>"
+                )
+
+                # Show as draft for QC
+                mail.Display(True)
+                email_count += 1
+
+            except Exception as e:
+                messagebox.showerror(
+                    "Email Error",
+                    f"Failed to create Outlook email draft for LAN ID '{lan_id_str}':\n\n"
+                    f"{type(e).__name__}: {e}",
+                )
+                # Continue with other groups
+
+        if email_count == 0:
+            messagebox.showinfo(
+                "No Emails Created",
+                "No emails were created. This may be because all rows are missing LAN IDs "
+                "and there is no fallback 'To:' address specified.",
             )
